@@ -136,10 +136,10 @@ function checkLose() {
   return null;
 }
 
-// === LEADERBOARD CONFIG (fill these after creating a Supabase project) ===
-const SUPABASE_URL = "https://YOUR_PROJECT.supabase.co";
-const SUPABASE_KEY = "YOUR_ANON_KEY";
-// ======================================================================
+// === LEADERBOARD CONFIG ===
+const SUPABASE_URL = "https://cgkmcpocfikqeawynvzq.supabase.co";
+const SUPABASE_KEY = "sb_publishable_PhTCDBstLhWJrQoam7iQRA_rThrW1vT";
+// ==========================
 
 async function saveScoreToDB(name = "Anonymous") {
   if (SUPABASE_URL.includes("YOUR_PROJECT")) return null;
