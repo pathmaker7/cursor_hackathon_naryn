@@ -62,6 +62,8 @@ let shownRound = 0;
 let phase = 'intro';             // intro | choose | impact | ended
 let runId = 0;                   // bumped on restart so stale animations stop themselves
 let impact = null;               // the decision being revealed
+let changes = [];                // stat changes of the latest decision, shown as chips on the right: { k, d, good, group }
+let showReasons = store.get('skg_reasons') === '1';
 let result = null;               // end screen state
 let draftName = store.get('skg_name') || '';
 let character = null;
@@ -107,6 +109,8 @@ function buildStats() {
       icon: h('span', { class: 'stat-icon' }),
       name: h('span', { class: 'stat-name' }),
       val: h('span', { class: 'stat-val' }),
+      chg: h('span', { class: 'stat-chg' }),
+      why: h('div', { class: 'stat-why' }),
       zone: h('i', { class: 'zone' }),
       fill: h('i', { class: 'fill' }),
       mark: st.lose ? h('i', { class: 'mark' }) : null,
@@ -116,7 +120,8 @@ function buildStats() {
       flashId: 0,
     };
     r.li = h('li', { class: 'stat' + (st.lose ? '' : ' none'), 'data-k': st.k },
-      h('div', { class: 'stat-top' }, r.icon, r.name, r.val),
+      h('div', { class: 'stat-top' }, r.icon, r.name, r.chg, r.val),
+      r.why,
       h('div', { class: 'bar' }, st.lose ? r.zone : null, r.fill, r.mark),
       h('div', { class: 'stat-foot' }, r.redline, r.left));
     rows[st.k] = r;
@@ -189,10 +194,23 @@ function flashRow(k, good) {
   setTimeout(() => li.classList.remove('flash-good', 'flash-bad'), 900);
 }
 const deltaText = (st, d) => `${d > 0 ? '+' : ''}${d}${st.k === 'debt' ? '%' : ''}`;
-function chip(k, good, text) {
-  const c = h('span', { class: `chip ${good ? 'good' : 'bad'}` }, text);
-  rows[k].li.append(c);
-  setTimeout(() => c.remove(), 1700);
+// Changes stay on the stat rows (+N green, -N red) until the next decision; reasons are opt in.
+const reasonText = c => {
+  const st = statDef[c.k];
+  return `${c.group ? `${tr(c.group.label)}: ` : ''}${tr(c.d > 0 ? st.up : st.down)}`;
+};
+function renderRowChanges(k, popLast = false) {
+  const r = rows[k], st = statDef[k], list = changes.filter(c => c.k === k);
+  r.chg.replaceChildren(...list.map((c, i) => h('b', { class: `chg ${c.good ? 'good' : 'bad'}${popLast && i === list.length - 1 ? ' pop' : ''}` }, deltaText(st, c.d))));
+  r.why.replaceChildren(...list.map(c => h('div', { class: c.good ? 'good' : 'bad' }, reasonText(c))));
+}
+function renderAllChanges() { for (const st of STATS) renderRowChanges(st.k); }
+function clearChanges() { changes = []; renderAllChanges(); }
+function paintReasonsToggle() {
+  const b = $('reasons-btn');
+  b.setAttribute('aria-pressed', String(showReasons));
+  b.textContent = `${showReasons ? '☑' : '☐'} ${t().reasons}`;
+  $('stats').classList.toggle('reasons', showReasons);
 }
 let floaterCount = 0;
 function floater(good, text) {
@@ -224,6 +242,7 @@ function renderTop() {
   $('sound-btn').title = t().sound;
   $('year-badge').textContent = yearOf(shownRound);
   $('stats-title').textContent = t().status;
+  paintReasonsToggle();
   const crashed = game.lost.length > 0 && shownRound === game.round;
   const dots = [];
   for (let i = 0; i < ROUNDS; i++) {
@@ -326,21 +345,12 @@ function typeInto(el, text) {
 }
 const roundStats = s => Object.fromEntries(Object.entries(s).map(([k, v]) => [k, Math.round(v)]));
 
-function lineEl(line) {
-  if (line.kind === 'group') return h('li', { class: 'group' }, `${line.label}: `, h('span', {}, line.text));
-  const st = statDef[line.k];
-  return h('li', { class: line.good ? 'good' : 'bad' },
-    h('span', { class: 'delta' }, `${st.icon(line.to)} ${tr(st.name)} ${deltaText(st, line.d)}`),
-    h('span', { class: 'why' }, tr(line.d > 0 ? st.up : st.down)));
-}
 function renderImpact() {
   const c = impact.choice, box = $('impact');
   box.hidden = false;
   box.replaceChildren(
     h('div', { class: 'picked' }, h('span', { class: `arch ${c.arch}` }, ARCH[c.arch]?.icon ?? ''), h('span', { class: 'title' }, tr(c.title))),
     h('p', { class: 'echo' }, tr(c.echo)),
-    h('div', { class: 'impact-head' }, t().impact),
-    h('ul', { class: 'feed', id: 'feed' }, impact.lines.map(lineEl)),
     h('div', { class: 'impact-actions', id: 'impact-actions' }));
   renderActions();
 }
@@ -365,8 +375,9 @@ async function choose(i) {
   const sceneIdx = game.round;
   const before = { ...game.stats };
   const steps = play(game, i);
-  impact = { sceneIdx, choice: SCENES[sceneIdx].choices[i], before, lines: [], done: false, skip: false, live: false, wake: null };
+  impact = { sceneIdx, choice: SCENES[sceneIdx].choices[i], before, done: false, skip: false, live: false, wake: null };
   shown = { ...before };
+  clearChanges();
   sound('click');
   const btns = [...$('choices').children];
   if (btns.length && !reduced) {   // chosen button glows, the others fade and shrink, then the feed takes over
@@ -387,19 +398,13 @@ const nap = ms => new Promise(r => {
 });
 function skip() { if (impact && impact.live && !impact.done) { impact.skip = true; impact.wake?.(); } }
 
-function addLine(line) {
-  impact.lines.push(line);
-  const feed = $('feed');
-  if (feed) { feed.append(lineEl(line)); feed.lastChild.scrollIntoView({ block: 'nearest' }); }
-}
-
-function reveal(d) {
+function reveal(d, group = null) {
   const st = statDef[d.k], good = (st.good === 'up') === (d.d > 0), mag = Math.abs(d.d);
-  addLine({ kind: 'delta', k: d.k, d: d.d, to: d.to, good });
+  changes.push({ k: d.k, d: d.d, good, group });
   setStat(d.k, d.to, !impact.skip);
   flashRow(d.k, good);
+  renderRowChanges(d.k, true);
   const text = `${tr(st.name)} ${deltaText(st, d.d)}`;
-  chip(d.k, good, deltaText(st, d.d));
   floater(good, `${st.icon(d.to)} ${text}`);
   flashStage(good, !good && mag >= 8);
   character?.react(good, mag);
@@ -422,10 +427,9 @@ async function animate(steps, my) {
       continue;
     }
     const info = step.type === 'drift' ? DRIFT : RIPPLES.find(r => r.id === step.id);
-    addLine({ kind: 'group', label: tr(info.label), text: tr(info.text) });
-    await nap(450);
+    await nap(250);
     if (my !== runId) return;
-    for (const d of step.deltas) reveal(d);
+    for (const d of step.deltas) reveal(d, info);
     await nap(1000);
   }
   if (my !== runId) return;
@@ -472,6 +476,7 @@ function startRun() {
   character?.reset();
   city?.setEnding(null);
   $('floaters').replaceChildren();
+  clearChanges();
   for (const st of STATS) setStat(st.k, shown[st.k], false);
   $('overlay').hidden = true;
   paintDanger(); syncCharacter(); syncCity(); renderTop(); renderCard();
@@ -649,9 +654,15 @@ function confetti() {
 function setLang(l) {
   lang = l;
   store.set('skg_lang', l);
+  renderAllChanges();
   paintAllStats(); paintDanger(); syncCharacter(); renderTop(); renderCard();
   if (!$('overlay').hidden) renderOverlay();
 }
+$('reasons-btn').addEventListener('click', () => {
+  showReasons = !showReasons;
+  store.set('skg_reasons', showReasons ? '1' : '0');
+  paintReasonsToggle();
+});
 $('lang-en').addEventListener('click', () => setLang('en'));
 $('lang-ru').addEventListener('click', () => setLang('ru'));
 $('sound-btn').addEventListener('click', () => { muted = !muted; store.set('skg_mute', muted ? '1' : '0'); renderTop(); if (!muted) sound('click'); });
