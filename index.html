@@ -5,37 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SolarPunk Kyrgyzstan — Future Paths</title>
   <link rel="stylesheet" href="style.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <div class="kalpak-wrap">
-        <div id="kalpak" class="kalpak">🏔️</div>
-        <div id="prosperity-label" class="prosperity-label">Stabilizing</div>
-      </div>
-      <h1 id="title">SolarPunk Kyrgyzstan</h1>
-      <p id="subtitle">Early 2026 · Mountains, water & hard choices</p>
+  <div class="app">
+    <header class="topbar">
+      <div class="logo">SolarPunk Kyrgyzstan</div>
+      <div class="year-badge" id="year-badge">2026</div>
       <div class="lang-switch">
         <button id="lang-en" class="lang-btn active">EN</button>
         <button id="lang-ru" class="lang-btn">RU</button>
       </div>
     </header>
 
-    <section id="stats-panel" class="stats-panel">
-      <div class="stats-header">
-        <h3 id="stats-title">National Status</h3>
-        <span id="year-badge" class="year-badge">2026</span>
-      </div>
-      <div id="stats-grid" class="stats-grid"></div>
-      <div id="score-display" class="score">Score: 48</div>
-    </section>
+    <main class="layout">
+      <section class="center-stage">
+        <div class="map-area">
+          <svg viewBox="0 0 200 120" class="kg-map">
+            <path fill="#2e5a3c" stroke="#7cb342" stroke-width="1.5" d="M30 40 L50 25 L80 20 L120 30 L160 35 L175 50 L165 75 L140 90 L100 95 L60 85 L35 70 Z"/>
+            <text x="100" y="65" text-anchor="middle" fill="#ffd54f" font-size="10" font-family="Outfit">Kyrgyzstan</text>
+          </svg>
+        </div>
+        <div class="character-area">
+          <div id="character" class="character">
+            <div class="head">
+              <div id="kalpak" class="kalpak">🏔️</div>
+            </div>
+            <div class="body"></div>
+          </div>
+          <div id="prosperity-label" class="prosperity-label">Stabilizing</div>
+        </div>
+        <div id="story" class="story-box"></div>
+        <div id="choices" class="choices"></div>
+      </section>
 
-    <section id="story-section" class="story-section">
-      <div id="story" class="story"></div>
-      <div id="choices" class="choices"></div>
-    </section>
+      <aside id="stats-panel" class="stats-side">
+        <h3 id="stats-title">National Status</h3>
+        <div id="stats-grid" class="stats-grid"></div>
+        <div id="score-display" class="score">Score: 48</div>
+      </aside>
+    </main>
 
     <div id="game-over" class="game-over hidden">
       <h2 id="end-title">End of Path</h2>

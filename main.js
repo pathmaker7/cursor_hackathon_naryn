@@ -88,13 +88,14 @@ function updateVisuals() {
   const level = prosperityLevel();
   const kalpak = document.getElementById("kalpak");
   const label = document.getElementById("prosperity-label");
-  kalpak.className = "kalpak level-" + level;
-  label.textContent = getText("prosperity")[level];
+  if (kalpak) {
+    kalpak.className = "kalpak level-" + level;
+    if (level >= 3) kalpak.textContent = "🌟";
+    else if (level >= 2) kalpak.textContent = "🏔️";
+    else kalpak.textContent = "⛰️";
+  }
+  if (label) label.textContent = getText("prosperity")[level];
   document.body.className = "prosper-" + level;
-  if (level >= 3) kalpak.textContent = "🌟🏔️";
-  else if (level >= 2) kalpak.textContent = "🏔️";
-  else if (level >= 1) kalpak.textContent = "⛰️";
-  else kalpak.textContent = "🪨";
 }
 
 function renderStats() {
