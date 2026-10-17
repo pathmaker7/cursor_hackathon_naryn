@@ -26,53 +26,116 @@ const T = {
 let lang = "en";
 const BASE = { literacy:99, poverty:25, energy:79, debt:40, nature:38, happiness:52, tourism:42, economy:62, culture:55 };
 const STATS = [
-  {k:"literacy", en:"Literacy", ru:"Грамотность", low:75},
-  {k:"poverty", en:"Poverty", ru:"Бедность", high:45},
-  {k:"energy", en:"Energy Independence", ru:"Энергонезависим.", low:40},
-  {k:"debt", en:"Debt (% GDP)", ru:"Долг (% ВВП)", high:180},
-  {k:"nature", en:"Nature", ru:"Природа", low:18},
-  {k:"happiness", en:"Happiness", ru:"Счастье", low:25},
-  {k:"tourism", en:"Tourism", ru:"Туризм"},
-  {k:"economy", en:"Economy", ru:"Экономика"},
-  {k:"culture", en:"Culture", ru:"Культура"}
+  {k:"literacy", en:"Literacy", ru:"Грамотность", low:70, sticker:v=>v>=98?"🧠":v>=90?"📚":v>=80?"😐":"😵"},
+  {k:"poverty", en:"Poverty", ru:"Бедность", high:50, sticker:v=>v<=15?"💚":v<=25?"🟡":"🔴"},
+  {k:"energy", en:"Energy Independence", ru:"Энергонезависим.", low:35, sticker:v=>v>=90?"⚡":v>=70?"🔋":"⚠️"},
+  {k:"debt", en:"Debt (% GDP)", ru:"Долг (% ВВП)", high:160, sticker:v=>v>=120?"💸":v>=70?"📉":"💰"},
+  {k:"nature", en:"Nature", ru:"Природа", low:15, sticker:v=>v>=55?"🌲":v>=35?"🌿":"🏜️"},
+  {k:"happiness", en:"Happiness", ru:"Счастье", low:20, sticker:v=>v>=70?"😊":v>=45?"🙂":"😟"},
+  {k:"tourism", en:"Tourism", ru:"Туризм", sticker:v=>v>=60?"🏔️":"🚶"},
+  {k:"economy", en:"Economy", ru:"Экономика", sticker:v=>v>=70?"📈":v>=50?"📊":"📉"},
+  {k:"culture", en:"Culture", ru:"Культура", sticker:v=>v>=65?"🎭":"📜"}
 ];
-let state={}, year=2026, score=48, sceneKey="start", busy=false;
+let state={}, year=2026, score=48, qIndex=0, busy=false, history=[];
 
-function init(){ state={...BASE}; year=2026; score=48; sceneKey="start"; busy=false;
+function init(){ state={...BASE}; year=2026; score=48; qIndex=0; busy=false; history=[];
   document.getElementById("game-over").style.display="none";
   document.getElementById("reaction").textContent="";
   show(); renderStats(); updateCharacter(0);
 }
 
-const scenes = {
-  start: {
-    en:"Early 2026. The country imports a lot of electricity, forests are small, and debt is moderate. What do you focus on first?",
-    ru:"Начало 2026. Страна много импортирует электричество, лесов мало, долг умеренный. На что сфокусироваться первым?",
+const questions = [
+  {
+    en:()=>"Early 2026. Electricity is partly imported, forests cover little land, debt is moderate. What is your first priority?",
+    ru:()=>"Начало 2026. Электричество частично импортируется, лесов мало, долг умеренный. Какой первый приоритет?",
     choices:[
-      {en:"Build big power plants with loans", ru:"Строить большие электростанции на кредиты", fx:{energy:15,debt:20,nature:-8,happiness:-4}},
-      {en:"Improve schools and plant trees", ru:"Улучшить школы и посадить деревья", fx:{literacy:2,nature:8,energy:4,happiness:6}},
-      {en:"Grow tourism and small factories", ru:"Развивать туризм и маленькие заводы", fx:{tourism:12,economy:8,nature:-4,poverty:-5}}
+      {en:"Build large power plants with foreign loans", ru:"Строить крупные электростанции на иностранные кредиты", fx:{energy:16,debt:18,nature:-9,happiness:-5}},
+      {en:"Strengthen schools and restore forests", ru:"Укрепить школы и восстанавливать леса", fx:{literacy:2,nature:9,energy:5,happiness:7}},
+      {en:"Expand tourism and light industry", ru:"Расширять туризм и лёгкую промышленность", fx:{tourism:14,economy:9,nature:-5,poverty:-6}}
     ]
   },
-  y29: {
-    en:"Three years later. You can see what your first choice did. What next?",
-    ru:"Три года спустя. Видно, что сделал первый выбор. Что дальше?",
+  {
+    en:()=>`Three years later. Literacy is ${Math.round(state.literacy)}%, energy independence is ${Math.round(state.energy)}%. What do you do now?`,
+    ru:()=>`Три года спустя. Грамотность ${Math.round(state.literacy)}%, энергонезависимость ${Math.round(state.energy)}%. Что делаем дальше?`,
     choices:[
-      {en:"Continue the same path", ru:"Продолжить тот же путь", fx:{energy:5,debt:10,nature:-5}},
-      {en:"Try to fix the damage", ru:"Попытаться исправить ущерб", fx:{nature:7,happiness:5,debt:3}},
-      {en:"Invest more in people", ru:"Больше инвестировать в людей", fx:{literacy:2,culture:6,happiness:5}}
+      {en:"Focus on energy security", ru:"Сфокусироваться на энергобезопасности", fx:{energy:8,debt:8,nature:-4}},
+      {en:"Invest in education quality", ru:"Инвестировать в качество образования", fx:{literacy:3,culture:5,happiness:4}},
+      {en:"Support local businesses and jobs", ru:"Поддержать местный бизнес и рабочие места", fx:{economy:7,poverty:-4,tourism:4}}
     ]
   },
-  y32: {
-    en:"Another three years. The country is at a turning point. Final choice?",
-    ru:"Ещё три года. Страна на перепутье. Финальный выбор?",
+  {
+    en:()=>`Nature score is ${Math.round(state.nature)} and debt is ${Math.round(state.debt)}% of GDP. How do you respond?`,
+    ru:()=>`Природа ${Math.round(state.nature)}, долг ${Math.round(state.debt)}% ВВП. Как реагируем?`,
     choices:[
-      {en:"Take more loans for big projects", ru:"Взять ещё кредиты на большие проекты", fx:{debt:15,energy:8,nature:-6}},
-      {en:"Protect nature and education", ru:"Защитить природу и образование", fx:{nature:8,happiness:6,literacy:1}},
-      {en:"Balance everything carefully", ru:"Аккуратно сбалансировать всё", fx:{energy:4,nature:3,happiness:4,debt:5}}
+      {en:"Protect remaining forests and water", ru:"Защитить оставшиеся леса и воду", fx:{nature:10,happiness:5,economy:-2}},
+      {en:"Take more loans for infrastructure", ru:"Взять ещё кредиты на инфраструктуру", fx:{debt:14,energy:6,economy:4}},
+      {en:"Balance both carefully", ru:"Аккуратно сбалансировать оба", fx:{nature:4,debt:5,energy:3,happiness:3}}
+    ]
+  },
+  {
+    en:()=>`Poverty is ${Math.round(state.poverty)}%. Happiness is ${Math.round(state.happiness)}. What next?`,
+    ru:()=>`Бедность ${Math.round(state.poverty)}%. Счастье ${Math.round(state.happiness)}. Что дальше?`,
+    choices:[
+      {en:"Direct support to poorer regions", ru:"Прямая поддержка бедных регионов", fx:{poverty:-7,happiness:6,debt:4}},
+      {en:"Push economic growth first", ru:"Сначала ускорить экономический рост", fx:{economy:9,poverty:-3,nature:-3}},
+      {en:"Strengthen culture and community", ru:"Укрепить культуру и сообщества", fx:{culture:8,happiness:5,literacy:1}}
+    ]
+  },
+  {
+    en:()=>`Energy independence is ${Math.round(state.energy)}%. Tourism is ${Math.round(state.tourism)}. Choose a direction.`,
+    ru:()=>`Энергонезависимость ${Math.round(state.energy)}%. Туризм ${Math.round(state.tourism)}. Выберите направление.`,
+    choices:[
+      {en:"Small hydro and rooftop solar", ru:"Малые ГЭС и крышная солнечная энергия", fx:{energy:7,nature:3,debt:4}},
+      {en:"Develop mountain tourism carefully", ru:"Аккуратно развивать горный туризм", fx:{tourism:10,economy:5,nature:-2}},
+      {en:"Cut spending and reduce debt", ru:"Сократить расходы и уменьшить долг", fx:{debt:-8,economy:-3,happiness:-2}}
+    ]
+  },
+  {
+    en:()=>`Culture is ${Math.round(state.culture)} and literacy is ${Math.round(state.literacy)}%. What matters more now?`,
+    ru:()=>`Культура ${Math.round(state.culture)}, грамотность ${Math.round(state.literacy)}%. Что важнее сейчас?`,
+    choices:[
+      {en:"Teacher training and rural schools", ru:"Подготовка учителей и сельские школы", fx:{literacy:3,culture:4,happiness:4}},
+      {en:"Festivals and cultural preservation", ru:"Фестивали и сохранение культуры", fx:{culture:9,happiness:5,tourism:3}},
+      {en:"Vocational training for jobs", ru:"Профессиональное обучение для работы", fx:{economy:6,poverty:-3,literacy:1}}
+    ]
+  },
+  {
+    en:()=>`Debt is ${Math.round(state.debt)}% of GDP. Nature is ${Math.round(state.nature)}. How do you handle pressure?`,
+    ru:()=>`Долг ${Math.round(state.debt)}% ВВП. Природа ${Math.round(state.nature)}. Как справляемся с давлением?`,
+    choices:[
+      {en:"Renegotiate and slow big projects", ru:"Пересмотреть условия и замедлить крупные проекты", fx:{debt:-6,energy:-2,happiness:3}},
+      {en:"Double down on energy exports", ru:"Удвоить ставку на экспорт энергии", fx:{energy:10,economy:6,nature:-6,debt:5}},
+      {en:"Community forest and water projects", ru:"Общественные проекты по лесам и воде", fx:{nature:8,happiness:6,culture:3}}
+    ]
+  },
+  {
+    en:()=>`Happiness is ${Math.round(state.happiness)}. Economy is ${Math.round(state.economy)}. Final stretch decisions.`,
+    ru:()=>`Счастье ${Math.round(state.happiness)}. Экономика ${Math.round(state.economy)}. Решения на финишной прямой.`,
+    choices:[
+      {en:"Public services and trust-building", ru:"Общественные услуги и укрепление доверия", fx:{happiness:8,literacy:1,debt:3}},
+      {en:"Attract more investment", ru:"Привлечь больше инвестиций", fx:{economy:8,debt:7,tourism:4}},
+      {en:"Protect natural heritage", ru:"Защитить природное наследие", fx:{nature:7,culture:4,tourism:3}}
+    ]
+  },
+  {
+    en:()=>`Almost done. Poverty ${Math.round(state.poverty)}%, energy ${Math.round(state.energy)}%. One more choice.`,
+    ru:()=>`Почти конец. Бедность ${Math.round(state.poverty)}%, энергия ${Math.round(state.energy)}%. Ещё один выбор.`,
+    choices:[
+      {en:"Stabilize and consolidate gains", ru:"Стабилизировать и закрепить успехи", fx:{happiness:4,economy:3,nature:2}},
+      {en:"One last big infrastructure push", ru:"Последний рывок в инфраструктуру", fx:{energy:6,debt:10,nature:-4}},
+      {en:"Focus on the next generation", ru:"Сфокусироваться на следующем поколении", fx:{literacy:2,culture:5,happiness:5}}
+    ]
+  },
+  {
+    en:()=>`Final year. Look at the numbers and choose the closing path.`,
+    ru:()=>`Финальный год. Посмотрите на цифры и выберите завершающий путь.`,
+    choices:[
+      {en:"Lock in nature and education", ru:"Закрепить природу и образование", fx:{nature:6,literacy:2,happiness:5}},
+      {en:"Push growth even if debt rises", ru:"Давить на рост, даже если долг растёт", fx:{economy:7,debt:8,nature:-3}},
+      {en:"Balanced close", ru:"Сбалансированное завершение", fx:{energy:3,nature:3,happiness:3,debt:3}}
     ]
   }
-};
+];
 
 function apply(fx){ const deltas=[]; for(const[k,v] of Object.entries(fx)) if(state[k]!==undefined){ const old=state[k]; state[k]=Math.max(0,Math.min(k==="debt"?600:100, state[k]+v)); deltas.push({k,v,old,now:state[k]}); }
   const good=(state.literacy+state.energy+state.nature+state.happiness+state.tourism+state.economy+state.culture)/7;
@@ -84,11 +147,44 @@ function prosperLevel(){ const a=(state.nature+state.happiness+state.energy+(100
 
 function renderStats(){
   const el=document.getElementById("stats"); el.innerHTML="";
-  STATS.forEach(s=>{ const v=Math.round(state[s.k]); let c=""; if(s.low&&v<s.low)c="bad"; else if(s.high&&v>s.high)c="bad"; else if(v>75||(s.k==="poverty"&&v<20)||(s.k==="debt"&&v<55))c="good";
-    el.innerHTML+=`<div class="stat" id="stat-${s.k}"><span>${lang==="ru"?s.ru:s.en}</span><span class="v">${v}${s.k==="debt"?"%":""}</span></div>`;
+  STATS.forEach(s=>{
+    const v=Math.round(state[s.k]);
+    let c="";
+    if(s.low && v < s.low) c="bad";
+    else if(s.high && v > s.high) c="bad";
+    else if(v>75 || (s.k==="poverty"&&v<20) || (s.k==="debt"&&v<55)) c="good";
+    const sticker = s.sticker ? s.sticker(v) : "";
+    const crit = s.low ? ` (lose <${s.low})` : s.high ? ` (lose >${s.high})` : "";
+    el.innerHTML+=`<div class="stat" id="stat-${s.k}"><span>${lang==="ru"?s.ru:s.en}${crit}</span><span class="v">${v}${s.k==="debt"?"%":""} ${sticker}</span></div>`;
   });
   document.getElementById("score").textContent=`${T[lang].score}: ${score}`;
   document.getElementById("year").textContent=year;
+}
+
+function show(){
+  if(qIndex >= questions.length){ end(T[lang].win); return; }
+  const q = questions[qIndex];
+  document.getElementById("story").textContent = q[lang]();
+  const ch = document.getElementById("choices"); ch.innerHTML="";
+  q.choices.forEach(c=>{
+    const b=document.createElement("button");
+    b.textContent = c[lang];
+    b.onclick=async()=>{
+      if(busy) return; busy=true;
+      history.push(c[lang]);
+      const deltas = apply(c.fx);
+      year += 1;
+      renderStats();
+      await animateDeltas(deltas);
+      const lose = check();
+      if(lose){ end(lose); return; }
+      qIndex++;
+      if(qIndex >= questions.length) end(T[lang].win);
+      else show();
+      busy=false;
+    };
+    ch.appendChild(b);
+  });
 }
 
 function fireworks(){
