@@ -91,9 +91,10 @@ function updateVisuals() {
   kalpak.className = "kalpak level-" + level;
   label.textContent = getText("prosperity")[level];
   document.body.className = "prosper-" + level;
-  // Kalpak gets greener / more golden as country prospers
-  if (level >= 2) kalpak.textContent = "🏔️";
-  else kalpak.textContent = "⛰️";
+  if (level >= 3) kalpak.textContent = "🌟🏔️";
+  else if (level >= 2) kalpak.textContent = "🏔️";
+  else if (level >= 1) kalpak.textContent = "⛰️";
+  else kalpak.textContent = "🪨";
 }
 
 function renderStats() {
@@ -109,10 +110,21 @@ function renderStats() {
     const label = lang === "ru" ? s.labelRu : s.labelEn;
     const sticker = s.sticker ? s.sticker(val) : "";
     const unit = s.key === "debt" ? "%" : "";
-    grid.innerHTML += `<div class="stat ${cls}"><div><div class="label">${label}</div><div class="value">${val}${unit}</div></div><span class="sticker">${sticker}</span></div>`;
+    const max = s.key === "debt" ? 200 : 100;
+    const pct = Math.min(100, (val / max) * 100);
+    grid.innerHTML += `
+      <div class="stat ${cls}">
+        <div class="info">
+          <div class="label">${label}</div>
+          <div class="value">${val}${unit}</div>
+          <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
+        </div>
+        <span class="sticker">${sticker}</span>
+      </div>`;
   });
   document.getElementById("score-display").textContent = `${getText("score")}: ${score}`;
-  document.getElementById("stats-title").textContent = `${getText("statsTitle")} — ${year}`;
+  document.getElementById("stats-title").textContent = getText("statsTitle");
+  document.getElementById("year-badge").textContent = year;
   updateVisuals();
 }
 

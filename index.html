@@ -5,39 +5,45 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SolarPunk Kyrgyzstan — Future Paths</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="container">
     <header>
-      <div id="kalpak-area" class="kalpak-area">
-        <div id="kalpak" class="kalpak">⛰️</div>
-        <div id="prosperity-label" class="prosperity-label"></div>
+      <div class="kalpak-wrap">
+        <div id="kalpak" class="kalpak">🏔️</div>
+        <div id="prosperity-label" class="prosperity-label">Stabilizing</div>
       </div>
       <h1 id="title">SolarPunk Kyrgyzstan</h1>
-      <p id="subtitle">Early 2026. Decisions shape the future.</p>
+      <p id="subtitle">Early 2026 · Mountains, water & hard choices</p>
       <div class="lang-switch">
         <button id="lang-en" class="lang-btn active">EN</button>
         <button id="lang-ru" class="lang-btn">RU</button>
       </div>
     </header>
 
-    <div id="stats-panel" class="stats-panel">
-      <h3 id="stats-title">Current Status (Early 2026)</h3>
+    <section id="stats-panel" class="stats-panel">
+      <div class="stats-header">
+        <h3 id="stats-title">National Status</h3>
+        <span id="year-badge" class="year-badge">2026</span>
+      </div>
       <div id="stats-grid" class="stats-grid"></div>
-      <div id="score-display" class="score"></div>
-    </div>
+      <div id="score-display" class="score">Score: 48</div>
+    </section>
 
-    <div id="story" class="story"></div>
-    <div id="choices" class="choices"></div>
+    <section id="story-section" class="story-section">
+      <div id="story" class="story"></div>
+      <div id="choices" class="choices"></div>
+    </section>
 
     <div id="game-over" class="game-over hidden">
       <h2 id="end-title">End of Path</h2>
       <p id="end-text"></p>
       <div id="leaderboard" class="leaderboard"></div>
-      <button id="restart">Restart</button>
+      <button id="restart">Play Again</button>
     </div>
   </div>
-
   <script src="main.js"></script>
 </body>
 </html>
