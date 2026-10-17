@@ -259,6 +259,18 @@ const scenes = {
   }
 };
 
+function formatEffects(effects) {
+  const parts = [];
+  for (const [k, v] of Object.entries(effects)) {
+    const sign = v > 0 ? "+" : "";
+    const label = lang === "ru" 
+      ? (STATS.find(s => s.key === k)?.labelRu || k)
+      : (STATS.find(s => s.key === k)?.labelEn || k);
+    parts.push(`${sign}${v} ${label}`);
+  }
+  return parts.join(" · ");
+}
+
 function showScene() {
   const scene = scenes[currentScene];
   document.getElementById("story").innerHTML = `<p>${scene.text[lang]}</p>`;
@@ -266,7 +278,8 @@ function showScene() {
   choicesEl.innerHTML = "";
   scene.choices.forEach(c => {
     const btn = document.createElement("button");
-    btn.textContent = c.text[lang];
+    const effectText = formatEffects(c.effects);
+    btn.innerHTML = `<strong>${c.text[lang]}</strong><br><span style="font-size:0.85rem;opacity:0.85">${effectText}</span>`;
     btn.onclick = () => {
       applyEffects(c.effects);
       year += 3;
