@@ -11,6 +11,7 @@ The only way through is to keep technology and nature growing together, and to c
 - 10 questions, each quoting the live numbers and the consequences of your earlier choices.
 - 3 radical choices per question: technology first (nature pays), nature first (technology and money pay), or a SolarPunk synthesis that has its own costs.
 - After every click each affected stat flashes green or red with its exact change ("Energy +12", "Debt +25%").
+- The header toggle **Skip animations** shows every result instantly and moves straight to the next question, so a run takes ten clicks. The final result screen stays manual so you can see what happened.
 - Six red lines are always visible next to the stats:
 
 | Stat | You lose if |

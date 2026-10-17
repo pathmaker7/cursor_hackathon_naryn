@@ -472,6 +472,7 @@ function finishImpact() {
     loadBoardInto(result);
   }
   paintDanger(); syncCharacter(); syncCity(); renderTop(); renderActions();
+  if (fast && !game.over) next();   // instant mode: straight to the next question, the numbers stay in the stat chips. The last result stays manual.
 }
 
 function next() {
