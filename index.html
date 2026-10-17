@@ -4,55 +4,56 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SolarPunk Kyrgyzstan — Future Paths</title>
-  <link rel="stylesheet" href="style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#07140e; --card:#12281c; --text:#e8f5e9; --gold:#ffd54f; --accent:#7cb342; --border:rgba(124,179,66,.4); }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    .top { display:flex; justify-content:space-between; align-items:center; padding:0.7rem 1rem; border-bottom:1px solid var(--border); }
+    .logo { color:var(--gold); font-weight:700; }
+    .layout { display:grid; grid-template-columns:1fr 340px; gap:1rem; padding:1rem; max-width:1200px; margin:0 auto; }
+    #canvas-wrap { background:var(--card); border-radius:12px; border:1px solid var(--border); height:320px; position:relative; }
+    #story { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1rem; margin:1rem 0; line-height:1.6; }
+    .choices button { display:block; width:100%; text-align:left; background:var(--card); border:1px solid var(--border); color:var(--text); padding:0.8rem 1rem; margin:0.4rem 0; border-radius:10px; cursor:pointer; }
+    .choices button:hover { border-color:var(--accent); }
+    .stats { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1rem; }
+    .stat { display:flex; justify-content:space-between; padding:0.4rem 0; border-bottom:1px solid rgba(255,255,255,.05); }
+    .stat.good .v { color:#66bb6a; } .stat.warn .v { color:#ffa726; } .stat.bad .v { color:#ef5350; }
+    .lang-btn { background:transparent; border:1px solid var(--border); color:var(--text); padding:0.2rem 0.6rem; border-radius:12px; cursor:pointer; margin-left:0.3rem; }
+    .lang-btn.active { background:var(--accent); color:#111; }
+    #game-over { display:none; margin-top:1rem; text-align:center; background:var(--card); padding:1.5rem; border-radius:12px; }
+    @media(max-width:900px){ .layout{grid-template-columns:1fr;} }
+  </style>
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="logo">SolarPunk Kyrgyzstan</div>
-      <div class="year-badge" id="year-badge">2026</div>
-      <div class="lang-switch">
-        <button id="lang-en" class="lang-btn active">EN</button>
-        <button id="lang-ru" class="lang-btn">RU</button>
-      </div>
-    </header>
-
-    <main class="layout">
-      <section class="center-stage">
-        <div class="map-area">
-          <svg viewBox="0 0 200 120" class="kg-map">
-            <path fill="#2e5a3c" stroke="#7cb342" stroke-width="1.5" d="M30 40 L50 25 L80 20 L120 30 L160 35 L175 50 L165 75 L140 90 L100 95 L60 85 L35 70 Z"/>
-            <text x="100" y="65" text-anchor="middle" fill="#ffd54f" font-size="10" font-family="Outfit">Kyrgyzstan</text>
-          </svg>
-        </div>
-        <div class="character-area">
-          <div id="character" class="character">
-            <div class="head">
-              <div id="kalpak" class="kalpak">🏔️</div>
-            </div>
-            <div class="body"></div>
-          </div>
-          <div id="prosperity-label" class="prosperity-label">Stabilizing</div>
-        </div>
-        <div id="story" class="story-box"></div>
-        <div id="choices" class="choices"></div>
-      </section>
-
-      <aside id="stats-panel" class="stats-side">
-        <h3 id="stats-title">National Status</h3>
-        <div id="stats-grid" class="stats-grid"></div>
-        <div id="score-display" class="score">Score: 48</div>
-      </aside>
-    </main>
-
-    <div id="game-over" class="game-over hidden">
-      <h2 id="end-title">End of Path</h2>
-      <p id="end-text"></p>
-      <div id="leaderboard" class="leaderboard"></div>
-      <button id="restart">Play Again</button>
+  <div class="top">
+    <div class="logo">SolarPunk Kyrgyzstan</div>
+    <div id="year">2026</div>
+    <div>
+      <button class="lang-btn active" id="en">EN</button>
+      <button class="lang-btn" id="ru">RU</button>
     </div>
   </div>
-  <script src="main.js"></script>
+  <div class="layout">
+    <div>
+      <div id="canvas-wrap"></div>
+      <div id="story"></div>
+      <div id="choices" class="choices"></div>
+    </div>
+    <aside class="stats">
+      <h3>National Status</h3>
+      <div id="stats"></div>
+      <div id="score" style="text-align:center;margin-top:0.8rem;color:var(--gold);font-weight:600;">Score: 48</div>
+    </aside>
+  </div>
+  <div id="game-over">
+    <h2 id="end-title">End of Path</h2>
+    <p id="end-text"></p>
+    <div id="leaderboard"></div>
+    <button id="restart" style="margin-top:1rem;padding:0.6rem 1.4rem;background:var(--accent);border:none;border-radius:20px;cursor:pointer;font-weight:700;">Play Again</button>
+  </div>
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+  </script>
+  <script type="module" src="main.js"></script>
 </body>
 </html>
