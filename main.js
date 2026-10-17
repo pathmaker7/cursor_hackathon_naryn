@@ -1,350 +1,696 @@
-import * as THREE from 'three';
+// UI glue: renders state, animates consequences, talks to the character and the leaderboard.
+// Rules live in engine.js, content in data.js, 3D in character.js.
+import { SCENES, STATS, BASE, UI, ARCH, TIERS, ENDINGS, DRIFT, RIPPLES } from './data.js';
+import {
+  newGame, play, ROUNDS, LOSE_STATS, statDef, remaining, danger, prosperity, tier,
+  won, scoreOf, endingKey, yearOf,
+} from './engine.js';
+import { cleanName, sameName, submitScore, loadBoard } from './leaderboard.js';
 
-const SUPABASE_URL = "https://cgkmcpocfikqeawynvzq.supabase.co";
-const SUPABASE_KEY = "sb_publishable_PhTCDBstLhWJrQoam7iQRA_rThrW1vT";
-
-const T = {
-  en: {
-    score:"Score", restart:"Play Again", save:"Save Score", namePh:"Your name",
-    loseDebt:"Debt too high. The country defaults.",
-    loseLit:"Literacy collapsed. The next generation is lost.",
-    loseNat:"Nature is destroyed beyond recovery.",
-    loseHap:"Trust collapsed. Society breaks.",
-    win:"The country held together. Not perfect, but alive.",
-    up:"Great move!", down:"Ouch..."
-  },
-  ru: {
-    score:"Балл", restart:"Играть снова", save:"Сохранить", namePh:"Ваше имя",
-    loseDebt:"Долг слишком высок. Дефолт.",
-    loseLit:"Грамотность рухнула.",
-    loseNat:"Природа уничтожена.",
-    loseHap:"Доверие рухнуло.",
-    win:"Страна удержалась.",
-    up:"Отличный ход!", down:"Больно..."
-  }
+const $ = id => document.getElementById(id);
+const store = {
+  get: k => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode: fine */ } },
 };
-let lang = "en";
-const BASE = { literacy:99, poverty:25, energy:79, debt:40, nature:38, happiness:52, tourism:42, economy:62, culture:55 };
-const STATS = [
-  {k:"literacy", en:"Literacy", ru:"Грамотность", low:70, sticker:v=>v>=98?"🧠":v>=90?"📚":v>=80?"😐":"😵"},
-  {k:"poverty", en:"Poverty", ru:"Бедность", high:50, sticker:v=>v<=15?"💚":v<=25?"🟡":"🔴"},
-  {k:"energy", en:"Energy Independence", ru:"Энергонезависим.", low:35, sticker:v=>v>=90?"⚡":v>=70?"🔋":"⚠️"},
-  {k:"debt", en:"Debt (% GDP)", ru:"Долг (% ВВП)", high:160, sticker:v=>v>=120?"💸":v>=70?"📉":"💰"},
-  {k:"nature", en:"Nature", ru:"Природа", low:15, sticker:v=>v>=55?"🌲":v>=35?"🌿":"🏜️"},
-  {k:"happiness", en:"Happiness", ru:"Счастье", low:20, sticker:v=>v>=70?"😊":v>=45?"🙂":"😟"},
-  {k:"tourism", en:"Tourism", ru:"Туризм", sticker:v=>v>=60?"🏔️":"🚶"},
-  {k:"economy", en:"Economy", ru:"Экономика", sticker:v=>v>=70?"📈":v>=50?"📊":"📉"},
-  {k:"culture", en:"Culture", ru:"Культура", sticker:v=>v>=65?"🎭":"📜"}
-];
-let state={}, year=2026, score=48, qIndex=0, busy=false, history=[];
-
-function init(){ state={...BASE}; year=2026; score=48; qIndex=0; busy=false; history=[];
-  document.getElementById("game-over").style.display="none";
-  document.getElementById("reaction").textContent="";
-  show(); renderStats(); updateCharacter(0);
-}
-
-const questions = [
-  {
-    en:()=>"Early 2026. Electricity is partly imported, forests cover little land, debt is moderate. What is your first priority?",
-    ru:()=>"Начало 2026. Электричество частично импортируется, лесов мало, долг умеренный. Какой первый приоритет?",
-    choices:[
-      {en:"Build large power plants with foreign loans", ru:"Строить крупные электростанции на иностранные кредиты", fx:{energy:16,debt:18,nature:-9,happiness:-5}},
-      {en:"Strengthen schools and restore forests", ru:"Укрепить школы и восстанавливать леса", fx:{literacy:2,nature:9,energy:5,happiness:7}},
-      {en:"Expand tourism and light industry", ru:"Расширять туризм и лёгкую промышленность", fx:{tourism:14,economy:9,nature:-5,poverty:-6}}
-    ]
-  },
-  {
-    en:()=>`Three years later. Literacy is ${Math.round(state.literacy)}%, energy independence is ${Math.round(state.energy)}%. What do you do now?`,
-    ru:()=>`Три года спустя. Грамотность ${Math.round(state.literacy)}%, энергонезависимость ${Math.round(state.energy)}%. Что делаем дальше?`,
-    choices:[
-      {en:"Focus on energy security", ru:"Сфокусироваться на энергобезопасности", fx:{energy:8,debt:8,nature:-4}},
-      {en:"Invest in education quality", ru:"Инвестировать в качество образования", fx:{literacy:3,culture:5,happiness:4}},
-      {en:"Support local businesses and jobs", ru:"Поддержать местный бизнес и рабочие места", fx:{economy:7,poverty:-4,tourism:4}}
-    ]
-  },
-  {
-    en:()=>`Nature score is ${Math.round(state.nature)} and debt is ${Math.round(state.debt)}% of GDP. How do you respond?`,
-    ru:()=>`Природа ${Math.round(state.nature)}, долг ${Math.round(state.debt)}% ВВП. Как реагируем?`,
-    choices:[
-      {en:"Protect remaining forests and water", ru:"Защитить оставшиеся леса и воду", fx:{nature:10,happiness:5,economy:-2}},
-      {en:"Take more loans for infrastructure", ru:"Взять ещё кредиты на инфраструктуру", fx:{debt:14,energy:6,economy:4}},
-      {en:"Balance both carefully", ru:"Аккуратно сбалансировать оба", fx:{nature:4,debt:5,energy:3,happiness:3}}
-    ]
-  },
-  {
-    en:()=>`Poverty is ${Math.round(state.poverty)}%. Happiness is ${Math.round(state.happiness)}. What next?`,
-    ru:()=>`Бедность ${Math.round(state.poverty)}%. Счастье ${Math.round(state.happiness)}. Что дальше?`,
-    choices:[
-      {en:"Direct support to poorer regions", ru:"Прямая поддержка бедных регионов", fx:{poverty:-7,happiness:6,debt:4}},
-      {en:"Push economic growth first", ru:"Сначала ускорить экономический рост", fx:{economy:9,poverty:-3,nature:-3}},
-      {en:"Strengthen culture and community", ru:"Укрепить культуру и сообщества", fx:{culture:8,happiness:5,literacy:1}}
-    ]
-  },
-  {
-    en:()=>`Energy independence is ${Math.round(state.energy)}%. Tourism is ${Math.round(state.tourism)}. Choose a direction.`,
-    ru:()=>`Энергонезависимость ${Math.round(state.energy)}%. Туризм ${Math.round(state.tourism)}. Выберите направление.`,
-    choices:[
-      {en:"Small hydro and rooftop solar", ru:"Малые ГЭС и крышная солнечная энергия", fx:{energy:7,nature:3,debt:4}},
-      {en:"Develop mountain tourism carefully", ru:"Аккуратно развивать горный туризм", fx:{tourism:10,economy:5,nature:-2}},
-      {en:"Cut spending and reduce debt", ru:"Сократить расходы и уменьшить долг", fx:{debt:-8,economy:-3,happiness:-2}}
-    ]
-  },
-  {
-    en:()=>`Culture is ${Math.round(state.culture)} and literacy is ${Math.round(state.literacy)}%. What matters more now?`,
-    ru:()=>`Культура ${Math.round(state.culture)}, грамотность ${Math.round(state.literacy)}%. Что важнее сейчас?`,
-    choices:[
-      {en:"Teacher training and rural schools", ru:"Подготовка учителей и сельские школы", fx:{literacy:3,culture:4,happiness:4}},
-      {en:"Festivals and cultural preservation", ru:"Фестивали и сохранение культуры", fx:{culture:9,happiness:5,tourism:3}},
-      {en:"Vocational training for jobs", ru:"Профессиональное обучение для работы", fx:{economy:6,poverty:-3,literacy:1}}
-    ]
-  },
-  {
-    en:()=>`Debt is ${Math.round(state.debt)}% of GDP. Nature is ${Math.round(state.nature)}. How do you handle pressure?`,
-    ru:()=>`Долг ${Math.round(state.debt)}% ВВП. Природа ${Math.round(state.nature)}. Как справляемся с давлением?`,
-    choices:[
-      {en:"Renegotiate and slow big projects", ru:"Пересмотреть условия и замедлить крупные проекты", fx:{debt:-6,energy:-2,happiness:3}},
-      {en:"Double down on energy exports", ru:"Удвоить ставку на экспорт энергии", fx:{energy:10,economy:6,nature:-6,debt:5}},
-      {en:"Community forest and water projects", ru:"Общественные проекты по лесам и воде", fx:{nature:8,happiness:6,culture:3}}
-    ]
-  },
-  {
-    en:()=>`Happiness is ${Math.round(state.happiness)}. Economy is ${Math.round(state.economy)}. Final stretch decisions.`,
-    ru:()=>`Счастье ${Math.round(state.happiness)}. Экономика ${Math.round(state.economy)}. Решения на финишной прямой.`,
-    choices:[
-      {en:"Public services and trust-building", ru:"Общественные услуги и укрепление доверия", fx:{happiness:8,literacy:1,debt:3}},
-      {en:"Attract more investment", ru:"Привлечь больше инвестиций", fx:{economy:8,debt:7,tourism:4}},
-      {en:"Protect natural heritage", ru:"Защитить природное наследие", fx:{nature:7,culture:4,tourism:3}}
-    ]
-  },
-  {
-    en:()=>`Almost done. Poverty ${Math.round(state.poverty)}%, energy ${Math.round(state.energy)}%. One more choice.`,
-    ru:()=>`Почти конец. Бедность ${Math.round(state.poverty)}%, энергия ${Math.round(state.energy)}%. Ещё один выбор.`,
-    choices:[
-      {en:"Stabilize and consolidate gains", ru:"Стабилизировать и закрепить успехи", fx:{happiness:4,economy:3,nature:2}},
-      {en:"One last big infrastructure push", ru:"Последний рывок в инфраструктуру", fx:{energy:6,debt:10,nature:-4}},
-      {en:"Focus on the next generation", ru:"Сфокусироваться на следующем поколении", fx:{literacy:2,culture:5,happiness:5}}
-    ]
-  },
-  {
-    en:()=>`Final year. Look at the numbers and choose the closing path.`,
-    ru:()=>`Финальный год. Посмотрите на цифры и выберите завершающий путь.`,
-    choices:[
-      {en:"Lock in nature and education", ru:"Закрепить природу и образование", fx:{nature:6,literacy:2,happiness:5}},
-      {en:"Push growth even if debt rises", ru:"Давить на рост, даже если долг растёт", fx:{economy:7,debt:8,nature:-3}},
-      {en:"Balanced close", ru:"Сбалансированное завершение", fx:{energy:3,nature:3,happiness:3,debt:3}}
-    ]
+function h(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v === true) e.setAttribute(k, '');
+    else if (v !== false && v != null) e.setAttribute(k, v);
   }
-];
-
-function apply(fx){ const deltas=[]; for(const[k,v] of Object.entries(fx)) if(state[k]!==undefined){ const old=state[k]; state[k]=Math.max(0,Math.min(k==="debt"?600:100, state[k]+v)); deltas.push({k,v,old,now:state[k]}); }
-  const good=(state.literacy+state.energy+state.nature+state.happiness+state.tourism+state.economy+state.culture)/7;
-  score=Math.max(0, Math.round(good - (state.poverty*0.6 + Math.min(state.debt,150)*0.25)*0.35));
-  return deltas;
+  e.append(...kids.flat().filter(x => x != null && x !== false));
+  return e;
 }
-function check(){ if(state.debt>=180) return T[lang].loseDebt; if(state.literacy<=75) return T[lang].loseLit; if(state.nature<=18) return T[lang].loseNat; if(state.happiness<=25) return T[lang].loseHap; return null; }
-function prosperLevel(){ const a=(state.nature+state.happiness+state.energy+(100-state.poverty)+Math.max(0,100-state.debt/2))/5; return a>=70?3:a>=55?2:a>=40?1:0; }
-
-function renderStats(){
-  const el=document.getElementById("stats"); el.innerHTML="";
-  STATS.forEach(s=>{
-    const v=Math.round(state[s.k]);
-    let c="";
-    if(s.low && v < s.low) c="bad";
-    else if(s.high && v > s.high) c="bad";
-    else if(v>75 || (s.k==="poverty"&&v<20) || (s.k==="debt"&&v<55)) c="good";
-    const sticker = s.sticker ? s.sticker(v) : "";
-    const crit = s.low ? ` (lose <${s.low})` : s.high ? ` (lose >${s.high})` : "";
-    el.innerHTML+=`<div class="stat" id="stat-${s.k}"><span>${lang==="ru"?s.ru:s.en}${crit}</span><span class="v">${v}${s.k==="debt"?"%":""} ${sticker}</span></div>`;
-  });
-  document.getElementById("score").textContent=`${T[lang].score}: ${score}`;
-  document.getElementById("year").textContent=year;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp01 = x => Math.max(0, Math.min(1, x));
+const SVGNS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs = {}) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
 }
 
-function show(){
-  if(qIndex >= questions.length){ end(T[lang].win); return; }
-  const q = questions[qIndex];
-  document.getElementById("story").textContent = q[lang]();
-  const ch = document.getElementById("choices"); ch.innerHTML="";
-  q.choices.forEach(c=>{
-    const b=document.createElement("button");
-    b.textContent = c[lang];
-    b.onclick=async()=>{
-      if(busy) return; busy=true;
-      history.push(c[lang]);
-      const deltas = apply(c.fx);
-      year += 1;
-      renderStats();
-      await animateDeltas(deltas);
-      const lose = check();
-      if(lose){ end(lose); return; }
-      qIndex++;
-      if(qIndex >= questions.length) end(T[lang].win);
-      else show();
-      busy=false;
-    };
-    ch.appendChild(b);
-  });
+// Harmony = how high BOTH technology and nature are (the lower one counts). Gauge ring shows it.
+const techOf = s => (typeof s.tech === 'number' ? s.tech : 34);
+const harmonyOf = s => Math.round(Math.min(techOf(s), s.nature));
+const GAUGE_LEN = 2 * Math.PI * 18;
+function buildGauge() {
+  const svg = svgEl('svg', { class: 'gauge', viewBox: '0 0 44 44', 'aria-hidden': 'true' });
+  const fg = svgEl('circle', { class: 'g-fg', cx: 22, cy: 22, r: 18, 'stroke-dasharray': GAUGE_LEN.toFixed(2), 'stroke-dashoffset': GAUGE_LEN.toFixed(2) });
+  const txt = svgEl('text', { x: 22, y: 23 });
+  svg.append(svgEl('circle', { class: 'g-bg', cx: 22, cy: 22, r: 18 }), fg, svgEl('path', { class: 'g-tri', d: 'M22 0.5l3 5h-6z' }), txt);
+  return {
+    el: svg,
+    set(stats) {
+      const hm = harmonyOf(stats);
+      fg.setAttribute('stroke-dashoffset', (GAUGE_LEN * (1 - clamp01(hm / 100))).toFixed(2));
+      svg.classList.toggle('skew', Math.abs(techOf(stats) - stats.nature) > 25);
+      txt.textContent = String(hm);
+    },
+  };
 }
+const stageGauge = buildGauge();
 
-function fireworks(){
-  const c=document.getElementById("fireworks"); c.width=window.innerWidth; c.height=window.innerHeight;
-  const ctx=c.getContext("2d"); let particles=[];
-  for(let i=0;i<40;i++) particles.push({x:c.width/2,y:c.height/2,vx:(Math.random()-0.5)*8,vy:(Math.random()-0.5)*8,life:60,color:`hsl(${Math.random()*60+40},100%,60%)`});
-  function frame(){ ctx.clearRect(0,0,c.width,c.height); particles.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.life--; ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,3,3); }); particles=particles.filter(p=>p.life>0); if(particles.length) requestAnimationFrame(frame); else ctx.clearRect(0,0,c.width,c.height); }
-  frame();
-}
+// ---------------------------------------------------------------- state
+const savedLang = store.get('skg_lang');
+let lang = savedLang === 'ru' || savedLang === 'en' ? savedLang : (navigator.language || '').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+let game = newGame();
+let shown = { ...game.stats };   // what the stat panel displays; trails game.stats while consequences animate
+let shownRound = 0;
+let phase = 'intro';             // intro | choose | impact | ended
+let runId = 0;                   // bumped on restart so stale animations stop themselves
+let impact = null;               // the decision being revealed
+let result = null;               // end screen state
+let draftName = store.get('skg_name') || '';
+let character = null;
+let city = null;
+let muted = store.get('skg_mute') === '1';
 
-async function animateDeltas(deltas){
-  const reaction=document.getElementById("reaction");
-  let anyUp=false, anyDown=false;
-  for(const d of deltas){
-    const el=document.getElementById("stat-"+d.k); if(!el) continue;
-    const up = (d.k==="poverty"||d.k==="debt") ? d.v<0 : d.v>0;
-    if(up) anyUp=true; else anyDown=true;
-    el.classList.add(up?"flash-up":"flash-down");
-    reaction.textContent = up ? T[lang].up : T[lang].down;
-    if(up) fireworks();
-    triggerReaction(up);
-    await new Promise(r=>setTimeout(r,700));
-    el.classList.remove("flash-up","flash-down");
-  }
-  reaction.textContent="";
-  updateCharacter(prosperLevel());
-}
+const t = () => UI[lang];
+const tr = o => o[lang];
 
-function end(msg){
-  document.getElementById("choices").innerHTML=""; document.getElementById("story").textContent="";
-  document.getElementById("end-title").textContent=lang==="ru"?"Конец пути":"End of Path";
-  document.getElementById("end-text").textContent=msg;
-  document.getElementById("game-over").style.display="block";
-  document.getElementById("player-name").placeholder=T[lang].namePh;
-  document.getElementById("save-score").textContent=T[lang].save;
-}
-
-async function saveScore(){
-  const name=document.getElementById("player-name").value.trim()||"Anonymous";
-  try{ await fetch(`${SUPABASE_URL}/rest/v1/scores`,{method:"POST",headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify({player_name:name,score,year})}); }catch(e){}
-  try{ const r=await fetch(`${SUPABASE_URL}/rest/v1/scores?select=player_name,score&order=score.desc&limit=8`,{headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}}); const data=await r.json();
-    let h="<ol>"; data.forEach(e=>h+=`<li>${e.player_name} — ${e.score}</li>`); document.getElementById("leaderboard").innerHTML=h+"</ol>"; }catch(e){}
-}
-
-// 3D character with clearer reactions
-const wrap=document.getElementById("canvas-wrap");
-const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
-renderer.setSize(wrap.clientWidth, wrap.clientHeight);
-wrap.appendChild(renderer.domElement);
-const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(50, wrap.clientWidth/wrap.clientHeight, 0.1, 100);
-camera.position.set(0,1.4,4);
-const light=new THREE.DirectionalLight(0xffffff,1.3); light.position.set(2,4,3); scene.add(light); scene.add(new THREE.AmbientLight(0x505050,1));
-
-const bodyMat=new THREE.MeshStandardMaterial({color:0x3d6b4f});
-const body=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.38,1.2,16), bodyMat);
-body.position.y=0.6; scene.add(body);
-
-const headMat=new THREE.MeshStandardMaterial({color:0xf5deb3});
-const head=new THREE.Mesh(new THREE.SphereGeometry(0.28,24,24), headMat);
-head.position.y=1.45; scene.add(head);
-
-// Better Kalpak (white body, black band, tassel) + more detailed face
-const kalpakGroup = new THREE.Group();
-const kalpakBody = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.22, 0.36, 0.38, 12),
-  new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.7})
-);
-kalpakBody.position.y = 0.05;
-const kalpakBand = new THREE.Mesh(
-  new THREE.TorusGeometry(0.34, 0.04, 8, 16),
-  new THREE.MeshStandardMaterial({color:0x111111})
-);
-kalpakBand.rotation.x = Math.PI/2;
-kalpakBand.position.y = -0.12;
-const tassel = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.015, 0.01, 0.18, 6),
-  new THREE.MeshStandardMaterial({color:0x222222})
-);
-tassel.position.y = 0.28;
-kalpakGroup.add(kalpakBody, kalpakBand, tassel);
-kalpakGroup.position.y = 1.72;
-scene.add(kalpakGroup);
-
-const eyeL=new THREE.Mesh(new THREE.SphereGeometry(0.035,8,8), new THREE.MeshStandardMaterial({color:0x111111}));
-const eyeR=eyeL.clone();
-eyeL.position.set(-0.07,1.48,0.25); eyeR.position.set(0.07,1.48,0.25); scene.add(eyeL,eyeR);
-
-const mouth=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.018,0.015), new THREE.MeshStandardMaterial({color:0x442222}));
-mouth.position.set(0,1.36,0.26); scene.add(mouth);
-
-// Face details
-const browL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.01), new THREE.MeshStandardMaterial({color:0x333333}));
-const browR = browL.clone();
-browL.position.set(-0.07, 1.54, 0.26); browR.position.set(0.07, 1.54, 0.26);
-scene.add(browL, browR);
-
-const nose = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), new THREE.MeshStandardMaterial({color:0xe8c9a0}));
-nose.position.set(0, 1.44, 0.27);
-scene.add(nose);
-
-const armL=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.55,8), bodyMat);
-const armR=armL.clone();
-armL.position.set(-0.38,0.85,0); armR.position.set(0.38,0.85,0);
-armL.rotation.z=0.3; armR.rotation.z=-0.3;
-scene.add(armL,armR);
-
-let reactionAnim = 0;
-let reactionType = 0; // 1 = good, -1 = bad
-
-function updateCharacter(level){
-  const colors=[0x6d4c41,0x3d6b4f,0x43a047,0xffd54f];
-  bodyMat.color.setHex(colors[Math.min(level,3)]);
-  kalpakGroup.scale.setScalar(1 + level * 0.08);
-  head.scale.set(1, 1 + level*0.03, 1);
-}
-
-function triggerReaction(isGood){
-  reactionAnim = 1;
-  reactionType = isGood ? 1 : -1;
-}
-
-function animate(){
-  requestAnimationFrame(animate);
-  body.rotation.y += 0.003;
-  head.rotation.y += 0.003;
-  kalpakGroup.rotation.y += 0.003;
-
-  if(reactionAnim > 0){
-    reactionAnim -= 0.015;
-    const t = Math.sin(reactionAnim * Math.PI);
-    if(reactionType > 0){
-      // Happy: lean back, arms up, smile
-      body.rotation.x = -t * 0.25;
-      head.rotation.x = -t * 0.15;
-      armL.rotation.z = 0.3 - t * 1.2;
-      armR.rotation.z = -0.3 + t * 1.2;
-      mouth.scale.y = 1 + t * 3;
-    } else {
-      // Sad: lean forward, arms down, frown
-      body.rotation.x = t * 0.3;
-      head.rotation.x = t * 0.25;
-      armL.rotation.z = 0.3 + t * 0.5;
-      armR.rotation.z = -0.3 - t * 0.5;
-      mouth.scale.y = 1 - t * 0.6;
+// ---------------------------------------------------------------- sound
+let audio;
+const SOUNDS = {
+  click: [[440, 0, 0.06, 'triangle', 0.05]],
+  good: [[660, 0, 0.1, 'sine'], [880, 0.09, 0.16, 'sine']],
+  bad: [[190, 0, 0.18, 'sawtooth', 0.045], [135, 0.12, 0.26, 'sawtooth', 0.045]],
+  win: [[523, 0, 0.18], [659, 0.15, 0.18], [784, 0.3, 0.18], [1047, 0.45, 0.5]],
+  lose: [[392, 0, 0.3, 'triangle'], [330, 0.28, 0.3, 'triangle'], [262, 0.56, 0.3, 'triangle'], [196, 0.84, 0.7, 'triangle']],
+};
+function sound(name) {
+  if (muted) return;
+  try {
+    audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+    for (const [freq, at, dur, type = 'sine', vol = 0.07] of SOUNDS[name]) {
+      const o = audio.createOscillator();
+      const g = audio.createGain();
+      const s = audio.currentTime + at;
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(vol, s);
+      g.gain.exponentialRampToValueAtTime(0.0001, s + dur);
+      o.connect(g).connect(audio.destination);
+      o.start(s); o.stop(s + dur + 0.02);
     }
-  } else {
-    body.rotation.x *= 0.92;
-    head.rotation.x *= 0.92;
-    armL.rotation.z = 0.3 + (armL.rotation.z - 0.3) * 0.9;
-    armR.rotation.z = -0.3 + (armR.rotation.z + 0.3) * 0.9;
-    mouth.scale.y = 1 + (mouth.scale.y - 1) * 0.85;
-  }
-  renderer.render(scene,camera);
+  } catch { /* no audio: fine */ }
 }
-animate();
-window.addEventListener("resize",()=>{ renderer.setSize(wrap.clientWidth,wrap.clientHeight); camera.aspect=wrap.clientWidth/wrap.clientHeight; camera.updateProjectionMatrix(); });
 
-document.getElementById("en").onclick=()=>{lang="en"; document.querySelectorAll(".lang-btn").forEach(b=>b.classList.remove("active")); document.getElementById("en").classList.add("active"); show();};
-document.getElementById("ru").onclick=()=>{lang="ru"; document.querySelectorAll(".lang-btn").forEach(b=>b.classList.remove("active")); document.getElementById("ru").classList.add("active"); show();};
-document.getElementById("restart").onclick=init;
-document.getElementById("save-score").onclick=saveScore;
-init();
+// ---------------------------------------------------------------- stat panel
+const rows = {};
+function buildStats() {
+  const ul = $('stats');
+  for (const st of STATS) {
+    const r = {
+      icon: h('span', { class: 'stat-icon' }),
+      name: h('span', { class: 'stat-name' }),
+      val: h('span', { class: 'stat-val' }),
+      zone: h('i', { class: 'zone' }),
+      fill: h('i', { class: 'fill' }),
+      mark: st.lose ? h('i', { class: 'mark' }) : null,
+      redline: h('span', { class: 'redline' }),
+      left: h('span', { class: 'left' }),
+      disp: shown[st.k],
+      flashId: 0,
+    };
+    r.li = h('li', { class: 'stat' + (st.lose ? '' : ' none'), 'data-k': st.k },
+      h('div', { class: 'stat-top' }, r.icon, r.name, r.val),
+      h('div', { class: 'bar' }, st.lose ? r.zone : null, r.fill, r.mark),
+      h('div', { class: 'stat-foot' }, r.redline, r.left));
+    rows[st.k] = r;
+    ul.append(r.li);
+  }
+}
+
+// ok / warn / crit / lost for red-line stats, based on distance left as a share of the starting distance.
+function level(st, v) {
+  if (st.lose) {
+    const left = remaining(st, v);
+    if (left <= 0) return 'lost';
+    const ratio = left / remaining(st, BASE[st.k]);
+    return ratio <= 0.25 ? 'crit' : ratio <= 0.5 ? 'warn' : 'ok';
+  }
+  const good = st.good === 'up' ? v : 100 - v;
+  return good >= 60 ? 'ok' : good <= 30 ? 'warn' : '';
+}
+
+const unit = st => (st.unit === '%' ? '%' : '');
+function paintStatText(k, v) {
+  const st = statDef[k], r = rows[k];
+  r.val.replaceChildren(String(Math.round(v)), h('small', {}, unit(st)));
+}
+function paintStat(k) {
+  const st = statDef[k], r = rows[k], v = shown[k];
+  r.name.textContent = tr(st.name);
+  r.icon.textContent = st.icon(v);
+  paintStatText(k, r.disp);
+  r.fill.style.width = `${Math.min(100, (v / st.max) * 100)}%`;
+  const lv = level(st, v);
+  r.li.dataset.level = lv;
+  r.fill.style.setProperty('--c', lv === 'lost' || lv === 'crit' ? 'var(--bad)' : lv === 'warn' ? 'var(--warn)' : 'var(--lime)');
+  if (st.lose) {
+    const at = (st.lose.at / st.max) * 100;
+    r.mark.style.left = `${at}%`;
+    r.zone.style.left = st.lose.dir === 'low' ? '0' : `${at}%`;
+    r.zone.style.width = st.lose.dir === 'low' ? `${at}%` : `${100 - at}%`;
+    const sign = st.lose.dir === 'low' ? '≤' : '≥';
+    r.redline.textContent = `☠ ${t().lose} ${sign} ${st.lose.at}`;
+    const left = remaining(st, v);
+    r.left.textContent = left <= 0 ? t().crossed : t().toGo(Math.round(left));
+  } else {
+    r.redline.textContent = t().noLine;
+    r.left.textContent = '';
+  }
+}
+function paintAllStats() { for (const st of STATS) paintStat(st.k); }
+
+function tween(k, to) {
+  const r = rows[k], from = r.disp, t0 = performance.now(), id = ++r.flashId;
+  r.disp = to;
+  (function step(now) {
+    if (id !== r.flashId) return;
+    const p = Math.min(1, (now - t0) / 450);
+    paintStatText(k, from + (to - from) * p);
+    if (p < 1) requestAnimationFrame(step);
+  })(t0);
+}
+function setStat(k, v, animate) {
+  shown[k] = v;
+  if (animate) { paintStat(k); tween(k, v); } else { rows[k].disp = v; rows[k].flashId++; paintStat(k); }
+}
+
+function flashRow(k, good) {
+  const li = rows[k].li;
+  li.classList.remove('flash-good', 'flash-bad');
+  void li.offsetWidth;
+  li.classList.add(good ? 'flash-good' : 'flash-bad');
+  setTimeout(() => li.classList.remove('flash-good', 'flash-bad'), 900);
+}
+const deltaText = (st, d) => `${d > 0 ? '+' : ''}${d}${st.k === 'debt' ? '%' : ''}`;
+function chip(k, good, text) {
+  const c = h('span', { class: `chip ${good ? 'good' : 'bad'}` }, text);
+  rows[k].li.append(c);
+  setTimeout(() => c.remove(), 1700);
+}
+let floaterCount = 0;
+function floater(good, text) {
+  const f = h('span', { class: `floater ${good ? 'good' : 'bad'}` }, text);
+  f.style.left = `${22 + ((floaterCount * 23) % 50)}%`;
+  f.style.bottom = `${16 + (floaterCount % 3) * 11}%`;
+  floaterCount++;
+  $('floaters').append(f);
+  setTimeout(() => f.remove(), 2000);
+}
+function flashStage(good, shake) {
+  const s = $('stage');
+  s.classList.remove('flash-good', 'flash-bad');
+  void s.offsetWidth;
+  s.classList.add(good ? 'flash-good' : 'flash-bad');
+  setTimeout(() => s.classList.remove('flash-good', 'flash-bad'), 380);
+  if (shake) { s.classList.remove('shake'); void s.offsetWidth; s.classList.add('shake'); }
+}
+
+// ---------------------------------------------------------------- header, banner, character
+function renderTop() {
+  $('brand-name').textContent = t().title;
+  document.title = t().title;
+  document.documentElement.lang = lang;
+  $('lang-en').classList.toggle('active', lang === 'en');
+  $('lang-ru').classList.toggle('active', lang === 'ru');
+  $('sound-btn').setAttribute('aria-pressed', String(!muted));
+  $('sound-btn').textContent = muted ? '🔇' : '🔊';
+  $('sound-btn').title = t().sound;
+  $('year-badge').textContent = yearOf(shownRound);
+  $('stats-title').textContent = t().status;
+  const crashed = game.lost.length > 0 && shownRound === game.round;
+  const dots = [];
+  for (let i = 0; i < ROUNDS; i++) {
+    const cls = i < shownRound ? (crashed && i === shownRound - 1 ? 'lost' : 'done')
+      : i === shownRound && !(game.over && shownRound === game.round) ? 'now' : '';
+    dots.push(h('li', { class: cls }));
+  }
+  $('progress').replaceChildren(...dots);
+  const P = prosperity(shown), ti = tier(P);
+  $('tier-pill').textContent = `${['🥀', '🌱', '🌳', '🌞'][ti]} ${t().prosperity}: ${tr(TIERS[ti])}`;
+  $('score-pill').textContent = `${t().score}: ${scoreOf(shownRound, shown, false)}`;
+  paintHarmony();
+}
+let hmText;
+function paintHarmony() {
+  const box = $('stage-harmony');
+  if (!hmText) {
+    hmText = { label: h('small', {}), line: h('b', {}) };
+    box.replaceChildren(stageGauge.el, h('span', { class: 'hm-text' }, hmText.label, hmText.line));
+  }
+  hmText.label.textContent = t().harmony;
+  hmText.line.textContent = t().harmonyLine(Math.round(techOf(shown)), Math.round(shown.nature));
+  stageGauge.set(shown);
+}
+
+function paintDanger() {
+  const d = danger(shown)[0], st = statDef[d.k], box = $('danger');
+  const lv = d.left <= 0 ? 'crit' : d.ratio <= 0.25 ? 'crit' : d.ratio <= 0.5 ? 'warn' : 'ok';
+  box.className = `danger ${lv}`;
+  const icon = d.left <= 0 ? '☠' : lv === 'ok' ? '🛡️' : '⚠️';
+  const text = d.left <= 0 ? `${t().crossed}: ${tr(st.name)} ${Math.round(shown[d.k])}`
+    : lv === 'ok' ? `${t().safe}. ${t().closest(tr(st.name), Math.round(d.left))}`
+      : t().closest(tr(st.name), Math.round(d.left));
+  box.replaceChildren(h('span', {}, icon), h('span', {}, text));
+}
+
+function syncCity() {
+  if (!city) return;
+  try {
+    const d = danger(shown)[0];
+    city.update(shown, prosperity(shown), 1 - clamp01(d.ratio));
+  } catch (err) { console.warn('city update failed:', err); }
+}
+
+function syncCharacter() {
+  const P = prosperity(shown), d = danger(shown)[0];
+  character?.setLook(P, Math.max(0, d.ratio), shown);
+  const f = $('stage-fallback');
+  if (!f.hidden) {
+    const face = game.lost.length && shownRound === game.round ? '😵' : d.ratio <= 0.25 ? '😰' : P >= 70 ? '😄' : P >= 52 ? '🙂' : '😟';
+    f.replaceChildren(h('span', {}, face), h('small', {}, t().noWebgl));
+  }
+}
+
+// ---------------------------------------------------------------- question card
+function renderCard() {
+  const idx = impact ? impact.sceneIdx : Math.min(game.round, ROUNDS - 1);
+  const sc = SCENES[idx];
+  const stats = impact ? impact.before : game.stats;
+  $('topic').textContent = `${t().decision(idx + 1, ROUNDS)}  ·  ${tr(sc.topic)}  ·  ${yearOf(idx)}`;
+  const prev = game.log[idx - 1];
+  const echo = prev && tr(SCENES[prev.round].choices[prev.i].echo);
+  $('lead').replaceChildren(...(echo ? [h('strong', {}, `${t().lastTime}: `), echo] : []));
+  typeInto($('question'), tr(sc.q)(roundStats(stats)));
+
+  const box = $('choices');
+  if (phase === 'choose' || phase === 'intro') {
+    $('impact').hidden = true;
+    box.hidden = false;
+    // No archetype label on the buttons: the player must not see which choice is the synthesis one.
+    box.replaceChildren(...sc.choices.map((c, i) => h('button', { class: 'choice', type: 'button', style: `--i:${i}`, onclick: () => choose(i) },
+      h('span', { class: 'key' }, String(i + 1)),
+      h('span', { class: 'title' }, tr(c.title)),
+      h('span', { class: 'sub' }, tr(c.sub)))));
+  } else {
+    box.hidden = true;
+    renderImpact();
+  }
+}
+// Quick typewriter (550ms at most). The full text is always in the DOM, the unrevealed tail is only hidden,
+// so layout never jumps. Any click or key press finishes it.
+let typeId = 0, finishTyping = null;
+function typeInto(el, text) {
+  const id = ++typeId;
+  finishTyping = null;
+  el.textContent = text;
+  if (reduced || text.length < 3) return;
+  const head = h('span', {}), tail = h('span', { class: 'ghost' }, text);
+  el.replaceChildren(head, tail);
+  const total = Math.min(550, Math.max(260, text.length * 8)), t0 = performance.now();
+  const stop = () => { if (id === typeId) { typeId++; finishTyping = null; el.textContent = text; } };
+  finishTyping = stop;
+  (function step(now) {
+    if (id !== typeId) return;
+    const n = Math.min(text.length, Math.floor(((now - t0) / total) * text.length));
+    head.textContent = text.slice(0, n);
+    tail.textContent = text.slice(n);
+    if (n < text.length) requestAnimationFrame(step); else stop();
+  })(t0);
+}
+const roundStats = s => Object.fromEntries(Object.entries(s).map(([k, v]) => [k, Math.round(v)]));
+
+function lineEl(line) {
+  if (line.kind === 'group') return h('li', { class: 'group' }, `${line.label}: `, h('span', {}, line.text));
+  const st = statDef[line.k];
+  return h('li', { class: line.good ? 'good' : 'bad' },
+    h('span', { class: 'delta' }, `${st.icon(line.to)} ${tr(st.name)} ${deltaText(st, line.d)}`),
+    h('span', { class: 'why' }, tr(line.d > 0 ? st.up : st.down)));
+}
+function renderImpact() {
+  const c = impact.choice, box = $('impact');
+  box.hidden = false;
+  box.replaceChildren(
+    h('div', { class: 'picked' }, h('span', { class: `arch ${c.arch}` }, ARCH[c.arch]?.icon ?? ''), h('span', { class: 'title' }, tr(c.title))),
+    h('p', { class: 'echo' }, tr(c.echo)),
+    h('div', { class: 'impact-head' }, t().impact),
+    h('ul', { class: 'feed', id: 'feed' }, impact.lines.map(lineEl)),
+    h('div', { class: 'impact-actions', id: 'impact-actions' }));
+  renderActions();
+}
+function renderActions() {
+  const box = $('impact-actions');
+  if (!box) return;
+  if (!impact.done) {
+    box.replaceChildren(h('button', { class: 'btn', type: 'button', onclick: skip }, `${t().skip} ▸▸`));
+  } else {
+    const b = h('button', { class: 'btn primary', type: 'button', onclick: next }, game.over ? t().result : `${t().next} ▸`);
+    box.replaceChildren(b);
+    b.focus({ preventScroll: true });
+  }
+}
+
+// ---------------------------------------------------------------- turn flow
+async function choose(i) {
+  if (phase !== 'choose') return;       // guards double clicks and key mashing
+  phase = 'impact';
+  finishTyping?.();
+  const my = runId;
+  const sceneIdx = game.round;
+  const before = { ...game.stats };
+  const steps = play(game, i);
+  impact = { sceneIdx, choice: SCENES[sceneIdx].choices[i], before, lines: [], done: false, skip: false, live: false, wake: null };
+  shown = { ...before };
+  sound('click');
+  const btns = [...$('choices').children];
+  if (btns.length && !reduced) {   // chosen button glows, the others fade and shrink, then the feed takes over
+    btns.forEach((b, j) => { b.disabled = true; b.classList.add(j === i ? 'chosen' : 'dim'); });
+    await sleep(480);
+    if (my !== runId) return;
+  }
+  impact.live = true;
+  renderCard();
+  window.scrollTo({ top: 0, behavior: 'smooth' });   // watch the character react
+  await animate(steps, my);
+}
+
+const nap = ms => new Promise(r => {
+  if (impact.skip) return r();
+  impact.wake = r;
+  setTimeout(r, ms);
+});
+function skip() { if (impact && impact.live && !impact.done) { impact.skip = true; impact.wake?.(); } }
+
+function addLine(line) {
+  impact.lines.push(line);
+  const feed = $('feed');
+  if (feed) { feed.append(lineEl(line)); feed.lastChild.scrollIntoView({ block: 'nearest' }); }
+}
+
+function reveal(d) {
+  const st = statDef[d.k], good = (st.good === 'up') === (d.d > 0), mag = Math.abs(d.d);
+  addLine({ kind: 'delta', k: d.k, d: d.d, to: d.to, good });
+  setStat(d.k, d.to, !impact.skip);
+  flashRow(d.k, good);
+  const text = `${tr(st.name)} ${deltaText(st, d.d)}`;
+  chip(d.k, good, deltaText(st, d.d));
+  floater(good, `${st.icon(d.to)} ${text}`);
+  flashStage(good, !good && mag >= 8);
+  character?.react(good, mag);
+  sound(good ? 'good' : 'bad');
+  paintDanger();
+  syncCharacter();
+  syncCity();
+  renderTop();
+}
+
+async function animate(steps, my) {
+  for (const step of steps) {
+    if (my !== runId) return;
+    if (step.type === 'choice') {
+      for (const d of [...step.deltas].sort((a, b) => Math.abs(b.d) - Math.abs(a.d))) {
+        if (my !== runId) return;
+        reveal(d);
+        await nap(750);
+      }
+      continue;
+    }
+    const info = step.type === 'drift' ? DRIFT : RIPPLES.find(r => r.id === step.id);
+    addLine({ kind: 'group', label: tr(info.label), text: tr(info.text) });
+    await nap(450);
+    if (my !== runId) return;
+    for (const d of step.deltas) reveal(d);
+    await nap(1000);
+  }
+  if (my !== runId) return;
+  finishImpact();
+}
+
+function finishImpact() {
+  shown = { ...game.stats };
+  for (const st of STATS) setStat(st.k, shown[st.k], false);
+  shownRound = game.round;
+  impact.done = true;
+  if (game.over) {
+    const win = won(game);
+    character?.setEnding(win ? 'win' : 'lose');
+    city?.setEnding(win ? 'win' : 'lose');
+    sound(win ? 'win' : 'lose');
+    if (win) confetti();
+    const final = scoreOf(game.round, game.stats, win);
+    const newBest = final > Number(store.get('skg_best') || 0);
+    if (newBest) store.set('skg_best', String(final));
+    result = { saving: false, saved: null, msg: null, board: undefined, score: final, newBest };
+    loadBoardInto(result);
+  }
+  paintDanger(); syncCharacter(); syncCity(); renderTop(); renderActions();
+}
+
+function next() {
+  if (phase !== 'impact' || !impact?.done) return;
+  if (game.over) { phase = 'ended'; renderOverlay(); return; }
+  impact = null;
+  phase = 'choose';
+  renderTop(); renderCard();
+  $('card').scrollIntoView({ block: 'start', behavior: 'smooth' });   // read the next question
+}
+
+function startRun() {
+  runId++;
+  game = newGame();
+  shown = { ...game.stats };
+  shownRound = 0;
+  impact = null;
+  result = null;
+  phase = 'choose';
+  character?.reset();
+  city?.setEnding(null);
+  $('floaters').replaceChildren();
+  for (const st of STATS) setStat(st.k, shown[st.k], false);
+  $('overlay').hidden = true;
+  paintDanger(); syncCharacter(); syncCity(); renderTop(); renderCard();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ---------------------------------------------------------------- overlay: intro and result
+async function loadBoardInto(target) {
+  target.board = undefined;
+  const my = runId;
+  try { target.board = await loadBoard(); } catch { target.board = null; }
+  if (my === runId && !$('overlay').hidden) renderOverlay();
+}
+
+function boardView(target) {
+  if (target.board === undefined) return h('p', { class: 'board-note' }, '...');
+  if (target.board === null) {
+    return h('div', {}, h('p', { class: 'board-note' }, t().offline),
+      h('button', { class: 'btn', type: 'button', onclick: () => { loadBoardInto(target); renderOverlay(); } }, t().retry));
+  }
+  if (!target.board.length) return h('p', { class: 'board-note' }, t().empty);
+  const me = result?.saved ? result.saved.name : null;
+  const li = (r, i) => h('li', { class: me && sameName(r.name, me) ? 'me' : '', style: `--i:${i}` },
+    h('span', { class: 'nm' }, r.name, me && sameName(r.name, me) ? h('span', { class: 'badge' }, t().you) : null),
+    h('span', { class: 'sc' }, String(r.score)));
+  const top = target.board.slice(0, 10).map(li);
+  const mine = me ? target.board.findIndex(r => sameName(r.name, me)) : -1;
+  if (mine >= 10) top.push(h('li', { class: 'me', style: `counter-set: rank ${mine + 1}` }, h('span', { class: 'nm' }, target.board[mine].name), h('span', { class: 'sc' }, String(target.board[mine].score))));
+  return h('ol', { class: 'board' }, top);
+}
+
+let modalFresh = true;   // true only when the overlay was hidden: full entrance animation, no replay on re-render
+function renderOverlay() {
+  const ov = $('overlay');
+  modalFresh = ov.hidden;
+  ov.hidden = false;
+  const input = document.activeElement?.id === 'name-input' ? document.activeElement : null;
+  const caret = input?.selectionStart;
+  ov.replaceChildren(phase === 'intro' ? introView() : resultView());
+  if (input) { const again = $('name-input'); again.focus({ preventScroll: true }); again.setSelectionRange(caret, caret); }
+  if (phase === 'intro') ov.querySelector('.btn.primary')?.focus({ preventScroll: true });
+}
+
+const modalClass = () => 'modal' + (modalFresh ? ' enter' : '');
+function logoClone() {
+  const l = document.querySelector('.brand-logo').cloneNode(true);
+  l.setAttribute('class', 'modal-logo');
+  l.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
+  l.querySelector('rect')?.setAttribute('fill', '#0f3a2a');
+  return l;
+}
+function messageBox(long) {
+  return h('div', { class: 'message' },
+    h('div', { class: 'mlabel' }, t().themeLabel),
+    h('p', { class: 'mtheme' }, t().theme),
+    long ? h('p', { class: 'mlong' }, t().themeLong) : null);
+}
+function harmonyCard(stats) {
+  const g = buildGauge();
+  if (modalFresh && !reduced) { g.el.querySelector('.g-fg').style.transitionDuration = '1.4s'; requestAnimationFrame(() => requestAnimationFrame(() => g.set(stats))); }
+  else { g.el.querySelector('.g-fg').style.transition = 'none'; g.set(stats); }
+  return h('div', { class: 'harmony-card' }, g.el,
+    h('div', { class: 'hm-text' },
+      h('small', {}, t().harmony),
+      h('b', {}, t().harmonyLine(Math.round(techOf(stats)), Math.round(stats.nature))),
+      h('span', {}, t().harmonyHint)));
+}
+
+let introBoard = { board: undefined };
+function introView() {
+  if (introBoard.board === undefined && !introBoard.loading) { introBoard.loading = true; loadBoardInto(introBoard); }
+  return h('div', { class: modalClass() },
+    h('h2', {}, logoClone(), t().title),
+    h('p', {}, t().tagline),
+    messageBox(true),
+    h('p', { class: 'goal' }, t().goal),
+    h('h3', {}, t().redLines),
+    h('ul', { class: 'redlines' }, LOSE_STATS.map((st, i) => h('li', { style: `--i:${i}` },
+      h('span', { class: 'ic' }, st.icon(st.lose.at)),
+      h('span', {}, tr(st.name), h('small', {}, `${t().lose} ${st.lose.dir === 'low' ? '≤' : '≥'} ${st.lose.at}`))))),
+    h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'button', onclick: startRun }, `${t().start} ▸`)),
+    h('h3', {}, t().leaderboard),
+    boardView(introBoard));
+}
+
+function resultView() {
+  const win = won(game);
+  const lostSt = statDef[game.lost[0]];
+  const end = win ? ENDINGS[endingKey(game)] : null;
+  const P = Math.round(prosperity(game.stats));
+  const doSave = e => { e.preventDefault(); save(); };
+  return h('div', { class: modalClass() },
+    h('h2', { class: win ? 'win' : 'lose' }, win ? `${end.icon} ${tr(end.title)}` : `☠ ${tr(lostSt.end.title)}`),
+    h('p', {}, win ? tr(end.text) : tr(lostSt.end.text)(Math.round(game.stats[lostSt.k]))),
+    h('p', { class: 'endmsg' }, win ? t().endWin : t().endLose),
+    harmonyCard(game.stats),
+    messageBox(true),
+    h('div', { class: 'bigscore' },
+      h('b', {}, String(result.score)),
+      h('span', {}, `${win ? t().youWin : t().youLose}. ${t().roundsDone(game.round, ROUNDS)}`),
+      result.newBest ? h('span', { class: 'badge' }, `${t().best}!`) : null),
+    h('p', { class: 'sub' }, t().breakdown(game.round, P, win)),
+    win ? null : h('div', { class: 'tip' }, h('strong', {}, `${t().tipTitle}: `), tr(lostSt.end.tip)),
+    h('h3', {}, t().pathTitle),
+    h('ul', { class: 'path' }, game.log.map(l => {
+      const c = SCENES[l.round].choices[l.i];
+      const a = ARCH[l.arch];
+      return h('li', { title: tr(c.title) }, `${yearOf(l.round)} ${a?.icon ?? ''} ${a ? tr(a.name) : ''}`);
+    })),
+    h('h3', {}, t().nameLabel),
+    h('form', { class: 'save-form', onsubmit: doSave },
+      h('input', {
+        type: 'text', id: 'name-input', maxlength: '20', value: draftName, placeholder: t().namePh, autocomplete: 'nickname',
+        disabled: !!result.saved || result.saving,
+        oninput: e => { draftName = e.target.value; },
+      }),
+      h('button', { class: 'btn primary', type: 'submit', disabled: !!result.saved || result.saving },
+        result.saving ? t().saving : result.saved ? `${t().saved} ✓` : t().save)),
+    h('p', { class: `msg ${result.msg?.err ? 'err' : result.saved ? 'okk' : ''}` },
+      result.msg ? result.msg.text : result.saved ? (result.saved.rank ? t().rankLine(result.saved.rank) : t().saved) : ''),
+    h('h3', {}, t().leaderboard),
+    boardView(result),
+    h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'button', onclick: startRun }, `${t().again} ▸`)));
+}
+
+async function save() {
+  if (!result || result.saving || result.saved) return;      // one save per run, ever
+  const name = cleanName(draftName);
+  if (name.length < 2) { result.msg = { err: true, text: t().nameShort }; renderOverlay(); return; }
+  result.saving = true; result.msg = null;
+  renderOverlay();
+  const my = runId, target = result;
+  try {
+    await submitScore(name, target.score, yearOf(game.round));
+  } catch {
+    target.saving = false;
+    target.msg = { err: true, text: t().saveFail };
+    if (my === runId) renderOverlay();
+    return;
+  }
+  store.set('skg_name', name);
+  draftName = name;
+  target.saving = false;
+  target.saved = { name, rank: 0 };
+  try {
+    target.board = await loadBoard();
+    target.saved.rank = target.board.findIndex(r => sameName(r.name, name)) + 1;
+  } catch { target.board = null; }
+  if (my === runId) renderOverlay();
+}
+
+// ---------------------------------------------------------------- confetti
+function confetti() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const c = $('confetti'), ctx = c.getContext('2d');
+  c.width = innerWidth; c.height = innerHeight;
+  const colors = ['#f6c453', '#9be15d', '#3fd0b0', '#ffffff', '#ff9a6b'];
+  const ps = Array.from({ length: 170 }, () => ({
+    x: Math.random() * c.width, y: -20 - Math.random() * c.height * 0.6, vx: (Math.random() - 0.5) * 3,
+    vy: 2 + Math.random() * 4, s: 5 + Math.random() * 7, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3,
+    c: colors[Math.floor(Math.random() * colors.length)],
+  }));
+  let frames = 0;
+  (function tick() {
+    ctx.clearRect(0, 0, c.width, c.height);
+    for (const p of ps) {
+      p.x += p.vx; p.y += p.vy; p.r += p.vr;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); ctx.restore();
+    }
+    if (++frames < 280) requestAnimationFrame(tick); else ctx.clearRect(0, 0, c.width, c.height);
+  })();
+}
+
+// ---------------------------------------------------------------- wiring
+function setLang(l) {
+  lang = l;
+  store.set('skg_lang', l);
+  paintAllStats(); paintDanger(); syncCharacter(); renderTop(); renderCard();
+  if (!$('overlay').hidden) renderOverlay();
+}
+$('lang-en').addEventListener('click', () => setLang('en'));
+$('lang-ru').addEventListener('click', () => setLang('ru'));
+$('sound-btn').addEventListener('click', () => { muted = !muted; store.set('skg_mute', muted ? '1' : '0'); renderTop(); if (!muted) sound('click'); });
+
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest('input, textarea')) return;
+  if (phase === 'choose' && ['1', '2', '3'].includes(e.key)) choose(Number(e.key) - 1);
+  else if (phase === 'impact' && impact && ['ArrowRight', ' ', 'Enter'].includes(e.key) && !e.target.closest('button')) {
+    e.preventDefault();
+    impact.done ? next() : skip();
+  }
+});
+
+async function initCharacter() {
+  try {
+    const mod = await import('./character.js');
+    character = mod.createCharacter($('stage'));
+    $('stage-fallback').hidden = true;
+  } catch (err) {
+    console.warn('3D character unavailable:', err);
+    $('stage-fallback').hidden = false;
+  }
+  syncCharacter();
+}
+
+async function initCity() {
+  try {
+    const mod = await import('./city.js');
+    city = mod.createCity($('stage'));
+    if (phase === 'ended' || (phase === 'impact' && impact?.done && game.over)) city.setEnding(won(game) ? 'win' : 'lose');
+  } catch (err) {
+    console.warn('City backdrop unavailable:', err);
+    city = null;
+  }
+  syncCity();
+}
+
+buildStats();
+paintAllStats(); paintDanger(); renderTop(); renderCard();
+renderOverlay();
+initCity();
+initCharacter();
