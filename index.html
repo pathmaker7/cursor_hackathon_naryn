@@ -9,16 +9,20 @@
 <body>
   <div class="container">
     <header>
+      <div id="kalpak-area" class="kalpak-area">
+        <div id="kalpak" class="kalpak">⛰️</div>
+        <div id="prosperity-label" class="prosperity-label"></div>
+      </div>
       <h1 id="title">SolarPunk Kyrgyzstan</h1>
-      <p id="subtitle">Decisions shape the future. Repair is possible.</p>
+      <p id="subtitle">Early 2026. Decisions shape the future.</p>
       <div class="lang-switch">
         <button id="lang-en" class="lang-btn active">EN</button>
         <button id="lang-ru" class="lang-btn">RU</button>
       </div>
     </header>
 
-    <div id="stats-panel" class="stats-panel hidden">
-      <h3 id="stats-title">Current Status</h3>
+    <div id="stats-panel" class="stats-panel">
+      <h3 id="stats-title">Current Status (Early 2026)</h3>
       <div id="stats-grid" class="stats-grid"></div>
       <div id="score-display" class="score"></div>
     </div>
@@ -29,12 +33,11 @@
     <div id="game-over" class="game-over hidden">
       <h2 id="end-title">End of Path</h2>
       <p id="end-text"></p>
+      <div id="leaderboard" class="leaderboard"></div>
       <button id="restart">Restart</button>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/inkjs@2.2.2/dist/ink.js"></script>
-  <script src="story.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
