@@ -197,14 +197,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outl
 .btn:disabled { opacity: 0.55; cursor: default; animation: none; }
 
 /* ---------- stats ---------- */
-.stats-col { position: sticky; top: 3.9rem; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.8rem 0.8rem 0.9rem; max-height: calc(100vh - 4.6rem); overflow-y: auto; }
+.stats-col { position: sticky; top: 3.9rem; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.8rem 0.8rem 0.9rem; max-height: calc(100vh - 4.6rem); overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--teal) transparent; }
 .stats-title { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; margin-bottom: 0.55rem; color: var(--gold); }
-.stats { list-style: none; display: grid; gap: 0.38rem; }
-.stat { position: relative; padding: 0.38rem 0.65rem 0.36rem; border-radius: 6px; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.05); transition: background 0.25s, border-color 0.25s, box-shadow 0.3s; }
-.stat-top { display: flex; align-items: center; gap: 0.5rem; }
+.stats { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.38rem; }
+.stat { min-width: 0; position: relative; padding: 0.38rem 0.65rem 0.36rem; border-radius: 6px; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.05); transition: background 0.25s, border-color 0.25s, box-shadow 0.3s; }
+.stat-top { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
 .stat-icon { font-size: 1.25rem; width: 1.7rem; text-align: center; transition: transform 0.3s; }
-.stat-name { flex: 1; font-weight: 600; font-size: 0.95rem; line-height: 1.1; }
-.stat-val { font-weight: 800; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.stat-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 600; font-size: 0.95rem; line-height: 1.1; }
+.stat-val { flex-shrink: 0; font-weight: 800; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
 .stat-val small { font-size: 0.7rem; font-weight: 600; color: var(--muted); margin-left: 1px; }
 .bar { position: relative; height: 7px; margin: 0.32rem 0 0.2rem; border-radius: 1px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
 .bar::after { /* shimmer sweep when the stat changes */
@@ -332,7 +332,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outl
 .toggle { background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 0.2rem 0.55rem; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); transition: color 0.2s, border-color 0.2s, background 0.2s; }
 .toggle:hover { color: var(--text); border-color: var(--teal); }
 .toggle[aria-pressed='true'] { color: var(--teal); border-color: var(--teal); background: rgba(63, 208, 176, 0.12); }
-.stat-chg { display: flex; flex-shrink: 0; gap: 0.25rem; }
+.stat-chg { display: flex; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; max-width: 62%; gap: 0.2rem; }
 .chg { font-family: var(--mono); font-weight: 800; font-size: 0.82rem; line-height: 1.2; padding: 0.05rem 0.4rem; border-radius: 4px; border: 1.5px solid; background: rgba(0, 0, 0, 0.4); }
 .chg.pop { animation: chgpop 0.55s ease-out; }
 .chg.good { color: var(--good); border-color: var(--good); }
@@ -342,3 +342,15 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outl
 .stat-why .bad { color: #ff8b82; }
 .stats:not(.reasons) .stat-why, .stat-why:empty { display: none; }
 @keyframes chgpop { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.3); opacity: 1; } 100% { transform: none; } }
+
+/* Header toggle: instant mode. Kills UI animation and transitions; ambient canvas life keeps running. */
+body.fast *, body.fast *::before, body.fast *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; transition-delay: 0ms !important; }
+#fast-btn { white-space: nowrap; }
+@media (max-width: 700px) { #fast-btn { padding: 0.2rem 0.4rem; font-size: 0.62rem; } }
+@media (max-width: 700px) { #fast-btn .toggle-label { display: none; } .top-right { gap: 0.4rem; } .top { gap: 0.5rem; } }
+@media (max-width: 440px) { #brand-name { display: none; } }
+
+/* Thin visible scrollbar so the status panel clearly scrolls when it is taller than the window. */
+.stats-col::-webkit-scrollbar { width: 6px; }
+.stats-col::-webkit-scrollbar-thumb { background: var(--teal); border-radius: 3px; }
+.stats-col::-webkit-scrollbar-track { background: transparent; }

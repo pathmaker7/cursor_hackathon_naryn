@@ -24,6 +24,8 @@ function h(tag, props = {}, ...kids) {
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let fast = store.get('skg_fast') === '1';   // header toggle: no UI animation, results appear instantly
+const still = () => reduced || fast;
 const clamp01 = x => Math.max(0, Math.min(1, x));
 const SVGNS = 'http://www.w3.org/2000/svg';
 function svgEl(tag, attrs = {}) {
@@ -206,6 +208,17 @@ function renderRowChanges(k, popLast = false) {
 }
 function renderAllChanges() { for (const st of STATS) renderRowChanges(st.k); }
 function clearChanges() { changes = []; renderAllChanges(); }
+function paintFastToggle() {
+  const b = $('fast-btn');
+  b.setAttribute('aria-pressed', String(fast));
+  b.textContent = `${fast ? '☑' : '☐'} ⚡ `;
+  const label = document.createElement('span');
+  label.className = 'toggle-label';
+  label.textContent = t().fast;
+  b.append(label);
+  b.title = b.ariaLabel = t().fast;
+  document.body.classList.toggle('fast', fast);
+}
 function paintReasonsToggle() {
   const b = $('reasons-btn');
   b.setAttribute('aria-pressed', String(showReasons));
@@ -238,6 +251,7 @@ function renderTop() {
   $('lang-en').classList.toggle('active', lang === 'en');
   $('lang-ru').classList.toggle('active', lang === 'ru');
   $('sound-btn').setAttribute('aria-pressed', String(!muted));
+  paintFastToggle();
   $('sound-btn').textContent = muted ? '🔇' : '🔊';
   $('sound-btn').title = t().sound;
   $('year-badge').textContent = yearOf(shownRound);
@@ -329,7 +343,7 @@ function typeInto(el, text) {
   const id = ++typeId;
   finishTyping = null;
   el.textContent = text;
-  if (reduced || text.length < 3) return;
+  if (still() || text.length < 3) return;
   const head = h('span', {}), tail = h('span', { class: 'ghost' }, text);
   el.replaceChildren(head, tail);
   const total = Math.min(550, Math.max(260, text.length * 8)), t0 = performance.now();
@@ -380,14 +394,15 @@ async function choose(i) {
   clearChanges();
   sound('click');
   const btns = [...$('choices').children];
-  if (btns.length && !reduced) {   // chosen button glows, the others fade and shrink, then the feed takes over
+  if (btns.length && !still()) {   // chosen button glows, the others fade and shrink, then the feed takes over
     btns.forEach((b, j) => { b.disabled = true; b.classList.add(j === i ? 'chosen' : 'dim'); });
     await sleep(480);
     if (my !== runId) return;
   }
   impact.live = true;
+  impact.skip = fast;                  // instant mode: no waits between changes
   renderCard();
-  window.scrollTo({ top: 0, behavior: 'smooth' });   // watch the character react
+  window.scrollTo({ top: 0, behavior: fast ? 'auto' : 'smooth' });   // watch the character react
   await animate(steps, my);
 }
 
@@ -401,14 +416,17 @@ function skip() { if (impact && impact.live && !impact.done) { impact.skip = tru
 function reveal(d, group = null) {
   const st = statDef[d.k], good = (st.good === 'up') === (d.d > 0), mag = Math.abs(d.d);
   changes.push({ k: d.k, d: d.d, good, group });
-  setStat(d.k, d.to, !impact.skip);
-  flashRow(d.k, good);
-  renderRowChanges(d.k, true);
+  const quiet = fast || impact.skip;   // skipped or instant: show the numbers, no effects
+  setStat(d.k, d.to, !quiet);
+  renderRowChanges(d.k, !quiet);
+  if (!quiet) flashRow(d.k, good);
   const text = `${tr(st.name)} ${deltaText(st, d.d)}`;
-  floater(good, `${st.icon(d.to)} ${text}`);
-  flashStage(good, !good && mag >= 8);
-  character?.react(good, mag);
-  sound(good ? 'good' : 'bad');
+  if (!quiet) {
+    floater(good, `${st.icon(d.to)} ${text}`);
+    flashStage(good, !good && mag >= 8);
+    character?.react(good, mag);
+    sound(good ? 'good' : 'bad');
+  }
   paintDanger();
   syncCharacter();
   syncCity();
@@ -446,7 +464,7 @@ function finishImpact() {
     character?.setEnding(win ? 'win' : 'lose');
     city?.setEnding(win ? 'win' : 'lose');
     sound(win ? 'win' : 'lose');
-    if (win) confetti();
+    if (win && !fast) confetti();
     const final = scoreOf(game.round, game.stats, win);
     const newBest = final > Number(store.get('skg_best') || 0);
     if (newBest) store.set('skg_best', String(final));
@@ -462,7 +480,7 @@ function next() {
   impact = null;
   phase = 'choose';
   renderTop(); renderCard();
-  $('card').scrollIntoView({ block: 'start', behavior: 'smooth' });   // read the next question
+  $('card').scrollIntoView({ block: 'start', behavior: fast ? 'auto' : 'smooth' });   // read the next question
 }
 
 function startRun() {
@@ -536,7 +554,7 @@ function messageBox(long) {
 }
 function harmonyCard(stats) {
   const g = buildGauge();
-  if (modalFresh && !reduced) { g.el.querySelector('.g-fg').style.transitionDuration = '1.4s'; requestAnimationFrame(() => requestAnimationFrame(() => g.set(stats))); }
+  if (modalFresh && !still()) { g.el.querySelector('.g-fg').style.transitionDuration = '1.4s'; requestAnimationFrame(() => requestAnimationFrame(() => g.set(stats))); }
   else { g.el.querySelector('.g-fg').style.transition = 'none'; g.set(stats); }
   return h('div', { class: 'harmony-card' }, g.el,
     h('div', { class: 'hm-text' },
@@ -665,6 +683,12 @@ $('reasons-btn').addEventListener('click', () => {
 });
 $('lang-en').addEventListener('click', () => setLang('en'));
 $('lang-ru').addEventListener('click', () => setLang('ru'));
+$('fast-btn').addEventListener('click', () => {
+  fast = !fast;
+  store.set('skg_fast', fast ? '1' : '0');
+  paintFastToggle();
+  if (fast) { finishTyping?.(); skip(); }   // turning it on mid-animation finishes the animation now
+});
 $('sound-btn').addEventListener('click', () => { muted = !muted; store.set('skg_mute', muted ? '1' : '0'); renderTop(); if (!muted) sound('click'); });
 
 document.addEventListener('keydown', e => {
