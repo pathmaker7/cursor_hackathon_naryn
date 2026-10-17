@@ -31,7 +31,10 @@ for (const [i, sc] of SCENES.entries()) {
       const q = sc.q[l](stats);
       assert.ok(q.length > 40 && !/undefined|NaN/.test(q), `scene ${i} ${l} question: ${q}`);
     }
-    assert.ok((sc.q[l](BASE).match(/\d+/g) || []).length >= 3, `scene ${i} ${l} quotes at least three numbers`);
+    // Unique sentinel values, so the "/100" in "nature is 41/100" cannot count as a quoted stat.
+    const sentinel = Object.fromEntries(Object.keys(BASE).map((k, j) => [k, 701 + j]));
+    const quoted = Object.values(sentinel).filter(v => sc.q[l](sentinel).includes(String(v))).length;
+    assert.ok(quoted >= 3, `scene ${i} ${l} quotes at least three live stats (found ${quoted})`);
   }
   for (const c of sc.choices) {
     assert.ok(Object.keys(c.fx).length >= 4, 'choices have real consequences');

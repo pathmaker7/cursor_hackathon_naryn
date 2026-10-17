@@ -1,7 +1,7 @@
 // Writes ANSWERS.local.md (gitignored): the best and worst button sequences. Run: npm run answers
 import fs from 'node:fs';
 import { SCENES, ARCH } from './data.js';
-import { ROUNDS } from './engine.js';
+import { ROUNDS, score } from './engine.js';
 import { enumerateAll, archOf, playSeq, pureArch } from './sim.js';
 
 const all = enumerateAll();
@@ -43,7 +43,7 @@ out.push('# Private answer sheet (gitignored, regenerate with `npm run answers`)
 for (const a of Object.keys(ARCH)) {
   const g = pureArch(a);
   const seq = g.log.map(l => l.i);
-  out.push(`- always **${a}**: press ${fmt(seq)} ${g.lost.length ? `=> LOSE by ${g.lost.join(' + ')} after decision ${g.round}` : '=> survives'} (score ${g.round * 25})`);
+  out.push(`- always **${a}**: press ${fmt(seq)} ${g.lost.length ? `=> LOSE by ${g.lost.join(' + ')} after decision ${g.round}` : '=> survives'} (score ${score(g)})`);
 }
 for (const b of [0, 1, 2]) {
   const g = playSeq(Array(ROUNDS).fill(b));

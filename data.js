@@ -74,7 +74,7 @@ export const STATS = [
         en: v => `Debt hit ${v}% of GDP. Creditors seize revenues and the currency collapses.`,
         ru: v => `Долг достиг ${v}% ВВП. Кредиторы забирают доходы, валюта рушится.`,
       },
-      tip: { en: 'Each megaproject loan adds a mountain of debt. Mix in choices that pay it down.', ru: 'Каждый кредит на мегапроект добавляет гору долга. Чередуйте с выбором, который долг гасит.' },
+      tip: { en: 'Every big project, even a green one, is a loan. Mix in choices that pay the debt down.', ru: 'Любой крупный проект, даже зелёный, это кредит. Чередуйте с выбором, который гасит долг.' },
     },
   },
   {
@@ -104,7 +104,7 @@ export const STATS = [
         en: v => `Happiness fell to ${v}. Protests become unrest and the government is overthrown.`,
         ru: v => `Счастье упало до ${v}. Протесты переросли в беспорядки, правительство свергнуто.`,
       },
-      tip: { en: 'Displacement, austerity and crackdowns make people furious. Do not only chase numbers.', ru: 'Переселение, экономия и репрессии вызывают ярость. Не гонитесь только за цифрами.' },
+      tip: { en: 'Displacement and austerity make people furious. Do not only chase numbers.', ru: 'Переселение и экономия вызывают ярость. Не гонитесь только за цифрами.' },
     },
   },
   {

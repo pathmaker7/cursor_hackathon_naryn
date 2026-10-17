@@ -1,5 +1,8 @@
 // Player-facing UI copy, prosperity tiers and endings. Every string is { en, ru }.
 
+// Russian plural of "решение": 1 решение, 2 to 4 решения, 5 to 20 решений.
+const ruDecisions = n => (n % 10 === 1 && n % 100 !== 11 ? 'решение' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'решения' : 'решений');
+
 // Prosperity bands (see engine.tier). Names also drive the character's outfit.
 export const TIERS = [
   { en: 'Struggling', ru: 'Тяжёлые времена' },
@@ -44,7 +47,7 @@ export const UI = {
     skip: 'Skip',
     youWin: 'You made it to 2046',
     youLose: 'The country fell',
-    roundsDone: (n, t) => `${n} of ${t} decisions survived`,
+    roundsDone: (n, t) => `${n} of ${t} decisions made`,
     nameLabel: 'Your name for the leaderboard',
     namePh: 'Type a name',
     save: 'Save to leaderboard',
@@ -62,7 +65,7 @@ export const UI = {
     pathTitle: 'Your path',
     tipTitle: 'Next time',
     sound: 'Sound',
-    breakdown: (r, p, w) => `${r} decisions + prosperity ${p}${w ? ' + victory bonus' : ''}`,
+    breakdown: (r, p, hm, w) => `${r} decisions + prosperity ${p} + harmony ${hm}${w ? ' + victory bonus' : ''}`,
     you: 'you',
     noWebgl: '3D view is not available on this device. The game works the same.',
     theme: 'SolarPunk is a vision of the future where technology and nature work together to create a beautiful, sustainable, and equitable world.',
@@ -105,7 +108,7 @@ export const UI = {
     skip: 'Пропустить',
     youWin: 'Вы дошли до 2046 года',
     youLose: 'Страна пала',
-    roundsDone: (n, t) => `Пройдено решений: ${n} из ${t}`,
+    roundsDone: (n, t) => `Принято решений: ${n} из ${t}`,
     nameLabel: 'Ваше имя для таблицы лидеров',
     namePh: 'Введите имя',
     save: 'Сохранить в таблицу',
@@ -123,7 +126,7 @@ export const UI = {
     pathTitle: 'Ваш путь',
     tipTitle: 'В следующий раз',
     sound: 'Звук',
-    breakdown: (r, p, w) => `${r} решений + процветание ${p}${w ? ' + бонус за победу' : ''}`,
+    breakdown: (r, p, hm, w) => `${r} ${ruDecisions(r)} + процветание ${p} + гармония ${hm}${w ? ' + бонус за победу' : ''}`,
     you: 'вы',
     noWebgl: '3D недоступно на этом устройстве. Игра работает так же.',
     theme: 'Технологии, которые улучшают жизнь, не вредя природе.',

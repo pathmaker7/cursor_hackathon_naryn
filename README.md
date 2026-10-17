@@ -25,7 +25,7 @@ The only way through is to keep technology and nature growing together, and to c
 
 - Start (early 2026): Literacy 99, Poverty 25, Energy 79, Debt 40, Nature 38, Happiness 52, Tourism 42, Economy 62, Culture 55, Technology 34.
 - Aftershock rules turn bad habits into spirals (debt interest, blackouts, poverty trap) and reward synergy (healthy technology and nature together).
-- English and Russian, Three.js character that reacts to every result, animated city that changes with the state of the country, Supabase leaderboard (one row per player).
+- English and Russian, Three.js character that reacts to every result, animated city that changes with the state of the country, Supabase leaderboard (shows each player's best score).
 
 ## Run locally
 
@@ -53,12 +53,6 @@ npm test
 ```
 
 Checks that content is complete in both languages, that all 3^10 button sequences behave, that every red line is reachable, that the game is winnable, that always picking the same type loses, and that tech-first play at nature's expense almost always loses.
-
-```
-npm run answers
-```
-
-Writes `ANSWERS.local.md` (gitignored, never pushed) with the best and worst button sequences.
 
 ## Files
 

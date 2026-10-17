@@ -3,7 +3,7 @@
 import { SCENES, STATS, BASE, UI, ARCH, TIERS, ENDINGS, DRIFT, RIPPLES } from './data.js';
 import {
   newGame, play, ROUNDS, LOSE_STATS, statDef, remaining, danger, prosperity, tier,
-  won, scoreOf, endingKey, yearOf,
+  won, scoreOf, harmony, endingKey, yearOf,
 } from './engine.js';
 import { cleanName, sameName, submitScore, loadBoard } from './leaderboard.js';
 
@@ -61,6 +61,8 @@ let lang = savedLang === 'ru' || savedLang === 'en' ? savedLang : (navigator.lan
 let game = newGame();
 let shown = { ...game.stats };   // what the stat panel displays; trails game.stats while consequences animate
 let shownRound = 0;
+let armedAt = 0;                 // clicks before this time are ignored, so a double click cannot answer the next question
+const arm = (ms = 300) => { armedAt = performance.now() + ms; };
 let phase = 'intro';             // intro | choose | impact | ended
 let runId = 0;                   // bumped on restart so stale animations stop themselves
 let impact = null;               // the decision being revealed
@@ -131,11 +133,19 @@ function buildStats() {
   }
 }
 
+// The engine judges a decision only after the aftershocks, so a stat that dips below its line mid-animation
+// is not lost until the decision has settled (shownRound caught up with the game).
+const settled = () => shownRound === game.round;
+function nearest() {
+  const d = danger(shown)[0];
+  return d.left <= 0 && !settled() ? { ...d, left: 0, ratio: 0.02 } : d;
+}
+
 // ok / warn / crit / lost for red-line stats, based on distance left as a share of the starting distance.
 function level(st, v) {
   if (st.lose) {
     const left = remaining(st, v);
-    if (left <= 0) return 'lost';
+    if (left <= 0) return settled() ? 'lost' : 'crit';
     const ratio = left / remaining(st, BASE[st.k]);
     return ratio <= 0.25 ? 'crit' : ratio <= 0.5 ? 'warn' : 'ok';
   }
@@ -165,7 +175,7 @@ function paintStat(k) {
     const sign = st.lose.dir === 'low' ? '≤' : '≥';
     r.redline.textContent = `☠ ${t().lose} ${sign} ${st.lose.at}`;
     const left = remaining(st, v);
-    r.left.textContent = left <= 0 ? t().crossed : t().toGo(Math.round(left));
+    r.left.textContent = left <= 0 && settled() ? t().crossed : t().toGo(Math.max(0, Math.round(left)));
   } else {
     r.redline.textContent = t().noLine;
     r.left.textContent = '';
@@ -267,7 +277,7 @@ function renderTop() {
   $('progress').replaceChildren(...dots);
   const P = prosperity(shown), ti = tier(P);
   $('tier-pill').textContent = `${['🥀', '🌱', '🌳', '🌞'][ti]} ${t().prosperity}: ${tr(TIERS[ti])}`;
-  $('score-pill').textContent = `${t().score}: ${scoreOf(shownRound, shown, false)}`;
+  $('score-pill').textContent = `${t().score}: ${scoreOf(shownRound, shown, game.over && settled() && won(game))}`;
   paintHarmony();
 }
 let hmText;
@@ -283,11 +293,12 @@ function paintHarmony() {
 }
 
 function paintDanger() {
-  const d = danger(shown)[0], st = statDef[d.k], box = $('danger');
+  const d = nearest(), st = statDef[d.k], box = $('danger');
+  const gone = d.left <= 0 && settled();     // a dip that the aftershocks lift again is not a loss
   const lv = d.left <= 0 ? 'crit' : d.ratio <= 0.25 ? 'crit' : d.ratio <= 0.5 ? 'warn' : 'ok';
   box.className = `danger ${lv}`;
-  const icon = d.left <= 0 ? '☠' : lv === 'ok' ? '🛡️' : '⚠️';
-  const text = d.left <= 0 ? `${t().crossed}: ${tr(st.name)} ${Math.round(shown[d.k])}`
+  const icon = gone ? '☠' : lv === 'ok' ? '🛡️' : '⚠️';
+  const text = gone ? `${t().crossed}: ${tr(st.name)} ${Math.round(shown[d.k])}`
     : lv === 'ok' ? `${t().safe}. ${t().closest(tr(st.name), Math.round(d.left))}`
       : t().closest(tr(st.name), Math.round(d.left));
   box.replaceChildren(h('span', {}, icon), h('span', {}, text));
@@ -296,13 +307,13 @@ function paintDanger() {
 function syncCity() {
   if (!city) return;
   try {
-    const d = danger(shown)[0];
+    const d = nearest();
     city.update(shown, prosperity(shown), 1 - clamp01(d.ratio));
   } catch (err) { console.warn('city update failed:', err); }
 }
 
 function syncCharacter() {
-  const P = prosperity(shown), d = danger(shown)[0];
+  const P = prosperity(shown), d = nearest();
   character?.setLook(P, Math.max(0, d.ratio), shown);
   const f = $('stage-fallback');
   if (!f.hidden) {
@@ -382,7 +393,7 @@ function renderActions() {
 
 // ---------------------------------------------------------------- turn flow
 async function choose(i) {
-  if (phase !== 'choose') return;       // guards double clicks and key mashing
+  if (phase !== 'choose' || performance.now() < armedAt) return;       // guards double clicks and key mashing
   phase = 'impact';
   finishTyping?.();
   const my = runId;
@@ -456,8 +467,8 @@ async function animate(steps, my) {
 
 function finishImpact() {
   shown = { ...game.stats };
+  shownRound = game.round;             // settled: from here a crossed red line is a real loss
   for (const st of STATS) setStat(st.k, shown[st.k], false);
-  shownRound = game.round;
   impact.done = true;
   if (game.over) {
     const win = won(game);
@@ -472,14 +483,15 @@ function finishImpact() {
     loadBoardInto(result);
   }
   paintDanger(); syncCharacter(); syncCity(); renderTop(); renderActions();
-  if (fast && !game.over) next();   // instant mode: straight to the next question, the numbers stay in the stat chips. The last result stays manual.
+  if (fast && !game.over) next(); else arm();   // instant mode: straight to the next question, the numbers stay in the stat chips. The last result stays manual.
 }
 
 function next() {
-  if (phase !== 'impact' || !impact?.done) return;
+  if (phase !== 'impact' || !impact?.done || performance.now() < armedAt) return;
   if (game.over) { phase = 'ended'; renderOverlay(); return; }
   impact = null;
   phase = 'choose';
+  arm();
   renderTop(); renderCard();
   $('card').scrollIntoView({ block: 'start', behavior: fast ? 'auto' : 'smooth' });   // read the next question
 }
@@ -492,6 +504,7 @@ function startRun() {
   impact = null;
   result = null;
   phase = 'choose';
+  arm();
   character?.reset();
   city?.setEnding(null);
   $('floaters').replaceChildren();
@@ -597,7 +610,7 @@ function resultView() {
       h('b', {}, String(result.score)),
       h('span', {}, `${win ? t().youWin : t().youLose}. ${t().roundsDone(game.round, ROUNDS)}`),
       result.newBest ? h('span', { class: 'badge' }, `${t().best}!`) : null),
-    h('p', { class: 'sub' }, t().breakdown(game.round, P, win)),
+    h('p', { class: 'sub' }, t().breakdown(game.round, P, Math.round(harmony(game.stats)), win)),
     win ? null : h('div', { class: 'tip' }, h('strong', {}, `${t().tipTitle}: `), tr(lostSt.end.tip)),
     h('h3', {}, t().pathTitle),
     h('ul', { class: 'path' }, game.log.map(l => {
@@ -640,6 +653,7 @@ async function save() {
   draftName = name;
   target.saving = false;
   target.saved = { name, rank: 0 };
+  if (my === runId) renderOverlay();     // show "Saved" at once, the rank follows when the board reloads
   try {
     target.board = await loadBoard();
     target.saved.rank = target.board.findIndex(r => sameName(r.name, name)) + 1;
@@ -693,7 +707,7 @@ $('fast-btn').addEventListener('click', () => {
 $('sound-btn').addEventListener('click', () => { muted = !muted; store.set('skg_mute', muted ? '1' : '0'); renderTop(); if (!muted) sound('click'); });
 
 document.addEventListener('keydown', e => {
-  if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest('input, textarea')) return;
+  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.target.closest('input, textarea')) return;   // a held key must not answer several questions
   if (phase === 'choose' && ['1', '2', '3'].includes(e.key)) choose(Number(e.key) - 1);
   else if (phase === 'impact' && impact && ['ArrowRight', ' ', 'Enter'].includes(e.key) && !e.target.closest('button')) {
     e.preventDefault();
