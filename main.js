@@ -136,22 +136,43 @@ function checkLose() {
   return null;
 }
 
-function saveScore() {
-  const board = JSON.parse(localStorage.getItem("solarpunk_kg_scores") || "[]");
-  board.push({ score, year, date: new Date().toISOString().slice(0, 10) });
-  board.sort((a, b) => b.score - a.score);
-  localStorage.setItem("solarpunk_kg_scores", JSON.stringify(board.slice(0, 10)));
-  return board.slice(0, 5);
+// === LEADERBOARD CONFIG (fill these after creating a Supabase project) ===
+const SUPABASE_URL = "https://YOUR_PROJECT.supabase.co";
+const SUPABASE_KEY = "YOUR_ANON_KEY";
+// ======================================================================
+
+async function saveScoreToDB(name = "Anonymous") {
+  if (SUPABASE_URL.includes("YOUR_PROJECT")) return null;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/scores`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({ player_name: name, score, year })
+    });
+  } catch (e) {
+    console.warn("Could not save score", e);
+  }
 }
 
-function showLeaderboard() {
-  const top = saveScore();
-  const el = document.getElementById("leaderboard");
-  if (!top.length) { el.innerHTML = ""; return; }
-  let html = `<h4>${getText("leaderboard")}</h4><ol>`;
-  top.forEach(e => html += `<li>${e.score} pts (${e.year})</li>`);
-  html += "</ol>";
-  el.innerHTML = html;
+async function fetchLeaderboard() {
+  if (SUPABASE_URL.includes("YOUR_PROJECT")) {
+    return JSON.parse(localStorage.getItem("solarpunk_kg_scores") || "[]");
+  }
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/scores?select=player_name,score,year,created_at&order=score.desc&limit=10`,
+      { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` } }
+    );
+    return await res.json();
+  } catch (e) {
+    console.warn("Could not load leaderboard", e);
+    return [];
+  }
 }
 
 const scenes = {
@@ -249,12 +270,27 @@ function showScene() {
   renderStats();
 }
 
-function endGame(msg) {
+async function endGame(msg) {
   document.getElementById("story").innerHTML = "";
   document.getElementById("choices").innerHTML = "";
   document.getElementById("end-title").textContent = lang === "ru" ? "Конец пути" : "End of Path";
   document.getElementById("end-text").textContent = msg;
-  showLeaderboard();
+
+  // Ask for name and save
+  const name = prompt(lang === "ru" ? "Ваше имя для рейтинга:" : "Your name for the leaderboard:") || "Anonymous";
+  await saveScoreToDB(name);
+
+  const top = await fetchLeaderboard();
+  const el = document.getElementById("leaderboard");
+  if (top && top.length) {
+    let html = `<h4>${getText("leaderboard")}</h4><ol>`;
+    top.forEach(e => html += `<li>${e.player_name || "Anonymous"} — ${e.score} pts (${e.year || ""})</li>`);
+    html += "</ol>";
+    el.innerHTML = html;
+  } else {
+    el.innerHTML = `<p>${lang === "ru" ? "Рейтинг пока пуст" : "Leaderboard is empty so far"}</p>`;
+  }
+
   document.getElementById("game-over").classList.remove("hidden");
 }
 
