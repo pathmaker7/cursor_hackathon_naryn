@@ -4,66 +4,114 @@ const SUPABASE_URL = "https://cgkmcpocfikqeawynvzq.supabase.co";
 const SUPABASE_KEY = "sb_publishable_PhTCDBstLhWJrQoam7iQRA_rThrW1vT";
 
 const T = {
-  en: { title:"SolarPunk Kyrgyzstan", restart:"Play Again", score:"Score",
-    loseDebt:"Debt too high. Default.", loseLit:"Literacy collapsed.", loseNat:"Nature destroyed.", loseHap:"Trust collapsed.",
-    win:"The country held together.", prosper:["Struggling","Stabilizing","Growing","Flourishing"] },
-  ru: { title:"СоларПанк Кыргызстан", restart:"Играть снова", score:"Балл",
-    loseDebt:"Долг слишком высок. Дефолт.", loseLit:"Грамотность рухнула.", loseNat:"Природа уничтожена.", loseHap:"Доверие рухнуло.",
-    win:"Страна удержалась.", prosper:["Тяжело","Стабилизация","Рост","Процветание"] }
+  en: {
+    score:"Score", restart:"Play Again", save:"Save Score", namePh:"Your name",
+    loseDebt:"Debt too high. The country defaults.",
+    loseLit:"Literacy collapsed. The next generation is lost.",
+    loseNat:"Nature is destroyed beyond recovery.",
+    loseHap:"Trust collapsed. Society breaks.",
+    win:"The country held together. Not perfect, but alive.",
+    up:"Great move!", down:"Ouch..."
+  },
+  ru: {
+    score:"Балл", restart:"Играть снова", save:"Сохранить", namePh:"Ваше имя",
+    loseDebt:"Долг слишком высок. Дефолт.",
+    loseLit:"Грамотность рухнула.",
+    loseNat:"Природа уничтожена.",
+    loseHap:"Доверие рухнуло.",
+    win:"Страна удержалась.",
+    up:"Отличный ход!", down:"Больно..."
+  }
 };
 let lang = "en";
 const BASE = { literacy:99, poverty:25, energy:79, debt:40, nature:38, happiness:52, tourism:42, economy:62, culture:55 };
 const STATS = [
-  {k:"literacy", en:"Literacy", ru:"Грамотность", low:75, sticker:v=>v>=98?"🧠":v>=90?"📚":"😐"},
-  {k:"poverty", en:"Poverty", ru:"Бедность", high:45, sticker:v=>v<=15?"💚":v<=25?"🟡":"🔴"},
-  {k:"energy", en:"Energy Ind.", ru:"Энергонезависим.", low:40, sticker:v=>v>=90?"⚡":"🔋"},
-  {k:"debt", en:"Debt %GDP", ru:"Долг %ВВП", high:180, sticker:v=>v>=120?"💸":"💰"},
-  {k:"nature", en:"Nature", ru:"Природа", low:18, sticker:v=>v>=55?"🌲":"🌿"},
-  {k:"happiness", en:"Happiness", ru:"Счастье", low:25, sticker:v=>v>=70?"😊":"🙂"},
-  {k:"tourism", en:"Tourism", ru:"Туризм", sticker:v=>v>=60?"🏔️":"🚶"},
-  {k:"economy", en:"Economy", ru:"Экономика", sticker:v=>v>=70?"📈":"📊"},
-  {k:"culture", en:"Culture", ru:"Культура", sticker:v=>v>=65?"🎭":"📜"}
+  {k:"literacy", en:"Literacy", ru:"Грамотность", low:75},
+  {k:"poverty", en:"Poverty", ru:"Бедность", high:45},
+  {k:"energy", en:"Energy Independence", ru:"Энергонезависим.", low:40},
+  {k:"debt", en:"Debt (% GDP)", ru:"Долг (% ВВП)", high:180},
+  {k:"nature", en:"Nature", ru:"Природа", low:18},
+  {k:"happiness", en:"Happiness", ru:"Счастье", low:25},
+  {k:"tourism", en:"Tourism", ru:"Туризм"},
+  {k:"economy", en:"Economy", ru:"Экономика"},
+  {k:"culture", en:"Culture", ru:"Культура"}
 ];
-let state={}, year=2026, score=48, sceneKey="start";
+let state={}, year=2026, score=48, sceneKey="start", busy=false;
 
-function init(){ state={...BASE}; year=2026; score=48; sceneKey="start"; document.getElementById("game-over").style.display="none"; show(); }
+function init(){ state={...BASE}; year=2026; score=48; sceneKey="start"; busy=false;
+  document.getElementById("game-over").style.display="none";
+  document.getElementById("reaction").textContent="";
+  show(); renderStats(); updateCharacter(0);
+}
 
 const scenes = {
-  start: { en:"Early 2026. Glaciers retreat, forests 6.4%, country imports ~4 TWh. Debt ~40% GDP. What first?",
-    ru:"Начало 2026. Ледники тают, леса 6,4%, импорт ~4 ТВт·ч. Долг ~40% ВВП. Что первым?",
+  start: {
+    en:"Early 2026. The country imports a lot of electricity, forests are small, and debt is moderate. What do you focus on first?",
+    ru:"Начало 2026. Страна много импортирует электричество, лесов мало, долг умеренный. На что сфокусироваться первым?",
     choices:[
-      {en:"Big hydro + solar with foreign loans", ru:"Крупные ГЭС + солнце на кредиты", fx:{energy:14,debt:22,nature:-10,happiness:-5,economy:7}},
-      {en:"Schools, small hydro, forests", ru:"Школы, малые ГЭС, леса", fx:{literacy:1,nature:7,energy:5,debt:5,happiness:6,culture:3}},
-      {en:"Tourism + light industry", ru:"Туризм + лёгкая промышленность", fx:{tourism:14,economy:9,nature:-5,debt:7,poverty:-4}}
-    ]},
-  y29: { en:"2029. First consequences are visible.", ru:"2029. Первые последствия видны.",
+      {en:"Build big power plants with loans", ru:"Строить большие электростанции на кредиты", fx:{energy:15,debt:20,nature:-8,happiness:-4}},
+      {en:"Improve schools and plant trees", ru:"Улучшить школы и посадить деревья", fx:{literacy:2,nature:8,energy:4,happiness:6}},
+      {en:"Grow tourism and small factories", ru:"Развивать туризм и маленькие заводы", fx:{tourism:12,economy:8,nature:-4,poverty:-5}}
+    ]
+  },
+  y29: {
+    en:"Three years later. You can see what your first choice did. What next?",
+    ru:"Три года спустя. Видно, что сделал первый выбор. Что дальше?",
     choices:[
-      {en:"Double down", ru:"Удвоить ставку", fx:{energy:6,debt:12,nature:-6}},
-      {en:"Repair damage", ru:"Исправить ущерб", fx:{nature:8,happiness:5,debt:4}},
-      {en:"Focus on education & culture", ru:"Образование и культура", fx:{literacy:2,culture:7,happiness:6}}
-    ]},
-  y32: { en:"2032. Water timing shifts. Neighbors watch the rivers.", ru:"2032. Сроки воды меняются. Соседи смотрят на реки.",
+      {en:"Continue the same path", ru:"Продолжить тот же путь", fx:{energy:5,debt:10,nature:-5}},
+      {en:"Try to fix the damage", ru:"Попытаться исправить ущерб", fx:{nature:7,happiness:5,debt:3}},
+      {en:"Invest more in people", ru:"Больше инвестировать в людей", fx:{literacy:2,culture:6,happiness:5}}
+    ]
+  },
+  y32: {
+    en:"Another three years. The country is at a turning point. Final choice?",
+    ru:"Ещё три года. Страна на перепутье. Финальный выбор?",
     choices:[
-      {en:"More external financing", ru:"Ещё внешнее финансирование", fx:{debt:18,energy:9,nature:-7}},
-      {en:"Protect nature + people", ru:"Защитить природу и людей", fx:{nature:9,happiness:7,literacy:1}},
-      {en:"Careful balance", ru:"Осторожный баланс", fx:{energy:4,nature:4,happiness:4,debt:6}}
-    ]}
+      {en:"Take more loans for big projects", ru:"Взять ещё кредиты на большие проекты", fx:{debt:15,energy:8,nature:-6}},
+      {en:"Protect nature and education", ru:"Защитить природу и образование", fx:{nature:8,happiness:6,literacy:1}},
+      {en:"Balance everything carefully", ru:"Аккуратно сбалансировать всё", fx:{energy:4,nature:3,happiness:4,debt:5}}
+    ]
+  }
 };
 
-function apply(fx){ for(const[k,v] of Object.entries(fx)) if(state[k]!==undefined) state[k]=Math.max(0,Math.min(k==="debt"?600:100, state[k]+v));
+function apply(fx){ const deltas=[]; for(const[k,v] of Object.entries(fx)) if(state[k]!==undefined){ const old=state[k]; state[k]=Math.max(0,Math.min(k==="debt"?600:100, state[k]+v)); deltas.push({k,v,old,now:state[k]}); }
   const good=(state.literacy+state.energy+state.nature+state.happiness+state.tourism+state.economy+state.culture)/7;
   score=Math.max(0, Math.round(good - (state.poverty*0.6 + Math.min(state.debt,150)*0.25)*0.35));
+  return deltas;
 }
 function check(){ if(state.debt>=180) return T[lang].loseDebt; if(state.literacy<=75) return T[lang].loseLit; if(state.nature<=18) return T[lang].loseNat; if(state.happiness<=25) return T[lang].loseHap; return null; }
-function prosper(){ const a=(state.nature+state.happiness+state.energy+(100-state.poverty)+Math.max(0,100-state.debt/2))/5; return a>=70?3:a>=55?2:a>=40?1:0; }
+function prosperLevel(){ const a=(state.nature+state.happiness+state.energy+(100-state.poverty)+Math.max(0,100-state.debt/2))/5; return a>=70?3:a>=55?2:a>=40?1:0; }
 
 function renderStats(){
   const el=document.getElementById("stats"); el.innerHTML="";
-  STATS.forEach(s=>{ const v=Math.round(state[s.k]); let c=""; if(s.low&&v<s.low)c="bad"; else if(s.high&&v>s.high)c="bad"; else if(v>75||(s.k==="poverty"&&v<20)||(s.k==="debt"&&v<55))c="good"; else if(v<45)c="warn";
-    el.innerHTML+=`<div class="stat ${c}"><span>${lang==="ru"?s.ru:s.en}</span><span class="v">${v}${s.k==="debt"?"%":""} ${s.sticker?s.sticker(v):""}</span></div>`;
+  STATS.forEach(s=>{ const v=Math.round(state[s.k]); let c=""; if(s.low&&v<s.low)c="bad"; else if(s.high&&v>s.high)c="bad"; else if(v>75||(s.k==="poverty"&&v<20)||(s.k==="debt"&&v<55))c="good";
+    el.innerHTML+=`<div class="stat" id="stat-${s.k}"><span>${lang==="ru"?s.ru:s.en}</span><span class="v">${v}${s.k==="debt"?"%":""}</span></div>`;
   });
   document.getElementById("score").textContent=`${T[lang].score}: ${score}`;
   document.getElementById("year").textContent=year;
+}
+
+function fireworks(){
+  const c=document.getElementById("fireworks"); c.width=window.innerWidth; c.height=window.innerHeight;
+  const ctx=c.getContext("2d"); let particles=[];
+  for(let i=0;i<40;i++) particles.push({x:c.width/2,y:c.height/2,vx:(Math.random()-0.5)*8,vy:(Math.random()-0.5)*8,life:60,color:`hsl(${Math.random()*60+40},100%,60%)`});
+  function frame(){ ctx.clearRect(0,0,c.width,c.height); particles.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.life--; ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,3,3); }); particles=particles.filter(p=>p.life>0); if(particles.length) requestAnimationFrame(frame); else ctx.clearRect(0,0,c.width,c.height); }
+  frame();
+}
+
+async function animateDeltas(deltas){
+  const reaction=document.getElementById("reaction");
+  for(const d of deltas){
+    const el=document.getElementById("stat-"+d.k); if(!el) continue;
+    const up = (d.k==="poverty"||d.k==="debt") ? d.v<0 : d.v>0;
+    el.classList.add(up?"flash-up":"flash-down");
+    reaction.textContent = up ? T[lang].up : T[lang].down;
+    if(up) fireworks();
+    await new Promise(r=>setTimeout(r,700));
+    el.classList.remove("flash-up","flash-down");
+  }
+  reaction.textContent="";
+  updateCharacter(prosperLevel());
 }
 
 function show(){
@@ -72,45 +120,60 @@ function show(){
   const ch=document.getElementById("choices"); ch.innerHTML="";
   sc.choices.forEach(c=>{
     const b=document.createElement("button");
-    const fx=Object.entries(c.fx).map(([k,v])=>`${v>0?"+":""}${v} ${lang==="ru"?(STATS.find(x=>x.k===k)?.ru||k):(STATS.find(x=>x.k===k)?.en||k)}`).join(" · ");
-    b.innerHTML=`<b>${c[lang]}</b><br><small>${fx}</small>`;
-    b.onclick=()=>{ apply(c.fx); year+=3; const lose=check(); if(lose){ end(lose); return; } sceneKey=sceneKey==="start"?"y29":sceneKey==="y29"?"y32":"end"; if(sceneKey==="end") end(T[lang].win); else show(); renderStats(); };
+    b.textContent=c[lang];
+    b.onclick=async()=>{ if(busy) return; busy=true; const deltas=apply(c.fx); year+=3; renderStats(); await animateDeltas(deltas); const lose=check(); if(lose){ end(lose); return; } sceneKey=sceneKey==="start"?"y29":sceneKey==="y29"?"y32":"end"; if(sceneKey==="end") end(T[lang].win); else show(); busy=false; };
     ch.appendChild(b);
   });
-  renderStats();
 }
 
-async function end(msg){
+function end(msg){
   document.getElementById("choices").innerHTML=""; document.getElementById("story").textContent="";
   document.getElementById("end-title").textContent=lang==="ru"?"Конец пути":"End of Path";
   document.getElementById("end-text").textContent=msg;
-  const name=prompt(lang==="ru"?"Имя для рейтинга:":"Name for leaderboard:")||"Anonymous";
-  try{ await fetch(`${SUPABASE_URL}/rest/v1/scores`,{method:"POST",headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify({player_name:name,score,year})}); }catch(e){}
-  try{ const r=await fetch(`${SUPABASE_URL}/rest/v1/scores?select=player_name,score,year&order=score.desc&limit=8`,{headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}}); const data=await r.json();
-    let h="<ol>"; data.forEach(e=>h+=`<li>${e.player_name} — ${e.score}</li>`); document.getElementById("leaderboard").innerHTML=h+"</ol>"; }catch(e){}
   document.getElementById("game-over").style.display="block";
+  document.getElementById("player-name").placeholder=T[lang].namePh;
+  document.getElementById("save-score").textContent=T[lang].save;
 }
 
-// Simple 3D scene
+async function saveScore(){
+  const name=document.getElementById("player-name").value.trim()||"Anonymous";
+  try{ await fetch(`${SUPABASE_URL}/rest/v1/scores`,{method:"POST",headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify({player_name:name,score,year})}); }catch(e){}
+  try{ const r=await fetch(`${SUPABASE_URL}/rest/v1/scores?select=player_name,score&order=score.desc&limit=8`,{headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}}); const data=await r.json();
+    let h="<ol>"; data.forEach(e=>h+=`<li>${e.player_name} — ${e.score}</li>`); document.getElementById("leaderboard").innerHTML=h+"</ol>"; }catch(e){}
+}
+
+// 3D character that reacts
 const wrap=document.getElementById("canvas-wrap");
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
 renderer.setSize(wrap.clientWidth, wrap.clientHeight);
 wrap.appendChild(renderer.domElement);
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(50, wrap.clientWidth/wrap.clientHeight, 0.1, 100);
-camera.position.set(0,1.2,3.5);
-const light=new THREE.DirectionalLight(0xffffff,1.2); light.position.set(2,3,2); scene.add(light); scene.add(new THREE.AmbientLight(0x404040,0.8));
-const body=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.45,1.4,16), new THREE.MeshStandardMaterial({color:0x3d6b4f}));
-body.position.y=0.7; scene.add(body);
-const head=new THREE.Mesh(new THREE.SphereGeometry(0.28,16,16), new THREE.MeshStandardMaterial({color:0xf5deb3}));
-head.position.y=1.6; scene.add(head);
-const kalpak=new THREE.Mesh(new THREE.ConeGeometry(0.32,0.4,8), new THREE.MeshStandardMaterial({color:0xffffff}));
+camera.position.set(0,1.3,3.8);
+const light=new THREE.DirectionalLight(0xffffff,1.2); light.position.set(2,3,2); scene.add(light); scene.add(new THREE.AmbientLight(0x404040,0.9));
+const bodyMat=new THREE.MeshStandardMaterial({color:0x3d6b4f});
+const body=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.42,1.3,16), bodyMat);
+body.position.y=0.65; scene.add(body);
+const headMat=new THREE.MeshStandardMaterial({color:0xf5deb3});
+const head=new THREE.Mesh(new THREE.SphereGeometry(0.3,20,20), headMat);
+head.position.y=1.55; scene.add(head);
+const kalpak=new THREE.Mesh(new THREE.ConeGeometry(0.34,0.45,8), new THREE.MeshStandardMaterial({color:0xffffff}));
 kalpak.position.y=1.95; scene.add(kalpak);
-function animate(){ requestAnimationFrame(animate); body.rotation.y+=0.005; head.rotation.y+=0.005; kalpak.rotation.y+=0.005; renderer.render(scene,camera); }
+const eyeL=new THREE.Mesh(new THREE.SphereGeometry(0.04,8,8), new THREE.MeshStandardMaterial({color:0x222222}));
+const eyeR=eyeL.clone(); eyeL.position.set(-0.08,1.58,0.26); eyeR.position.set(0.08,1.58,0.26); scene.add(eyeL,eyeR);
+
+function updateCharacter(level){
+  const colors=[0x8b4513,0x3d6b4f,0x4caf50,0xffd54f];
+  bodyMat.color.setHex(colors[level]||0x3d6b4f);
+  kalpak.scale.set(1+level*0.1,1+level*0.15,1+level*0.1);
+  head.scale.set(1,1+level*0.05,1);
+}
+function animate(){ requestAnimationFrame(animate); body.rotation.y+=0.004; head.rotation.y+=0.004; kalpak.rotation.y+=0.004; renderer.render(scene,camera); }
 animate();
 window.addEventListener("resize",()=>{ renderer.setSize(wrap.clientWidth,wrap.clientHeight); camera.aspect=wrap.clientWidth/wrap.clientHeight; camera.updateProjectionMatrix(); });
 
 document.getElementById("en").onclick=()=>{lang="en"; document.querySelectorAll(".lang-btn").forEach(b=>b.classList.remove("active")); document.getElementById("en").classList.add("active"); show();};
 document.getElementById("ru").onclick=()=>{lang="ru"; document.querySelectorAll(".lang-btn").forEach(b=>b.classList.remove("active")); document.getElementById("ru").classList.add("active"); show();};
 document.getElementById("restart").onclick=init;
+document.getElementById("save-score").onclick=saveScore;
 init();
