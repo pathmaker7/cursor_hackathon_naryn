@@ -213,18 +213,6 @@ async function animateDeltas(deltas){
   updateCharacter(prosperLevel());
 }
 
-function show(){
-  const sc=scenes[sceneKey]; if(!sc){ end(T[lang].win); return; }
-  document.getElementById("story").textContent=sc[lang];
-  const ch=document.getElementById("choices"); ch.innerHTML="";
-  sc.choices.forEach(c=>{
-    const b=document.createElement("button");
-    b.textContent=c[lang];
-    b.onclick=async()=>{ if(busy) return; busy=true; const deltas=apply(c.fx); year+=3; renderStats(); await animateDeltas(deltas); const lose=check(); if(lose){ end(lose); return; } sceneKey=sceneKey==="start"?"y29":sceneKey==="y29"?"y32":"end"; if(sceneKey==="end") end(T[lang].win); else show(); busy=false; };
-    ch.appendChild(b);
-  });
-}
-
 function end(msg){
   document.getElementById("choices").innerHTML=""; document.getElementById("story").textContent="";
   document.getElementById("end-title").textContent=lang==="ru"?"Конец пути":"End of Path";
@@ -259,15 +247,44 @@ const headMat=new THREE.MeshStandardMaterial({color:0xf5deb3});
 const head=new THREE.Mesh(new THREE.SphereGeometry(0.28,24,24), headMat);
 head.position.y=1.45; scene.add(head);
 
-const kalpak=new THREE.Mesh(new THREE.ConeGeometry(0.32,0.42,8), new THREE.MeshStandardMaterial({color:0xffffff}));
-kalpak.position.y=1.82; scene.add(kalpak);
+// Better Kalpak (white body, black band, tassel) + more detailed face
+const kalpakGroup = new THREE.Group();
+const kalpakBody = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.22, 0.36, 0.38, 12),
+  new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.7})
+);
+kalpakBody.position.y = 0.05;
+const kalpakBand = new THREE.Mesh(
+  new THREE.TorusGeometry(0.34, 0.04, 8, 16),
+  new THREE.MeshStandardMaterial({color:0x111111})
+);
+kalpakBand.rotation.x = Math.PI/2;
+kalpakBand.position.y = -0.12;
+const tassel = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.015, 0.01, 0.18, 6),
+  new THREE.MeshStandardMaterial({color:0x222222})
+);
+tassel.position.y = 0.28;
+kalpakGroup.add(kalpakBody, kalpakBand, tassel);
+kalpakGroup.position.y = 1.72;
+scene.add(kalpakGroup);
 
 const eyeL=new THREE.Mesh(new THREE.SphereGeometry(0.035,8,8), new THREE.MeshStandardMaterial({color:0x111111}));
 const eyeR=eyeL.clone();
-eyeL.position.set(-0.07,1.48,0.24); eyeR.position.set(0.07,1.48,0.24); scene.add(eyeL,eyeR);
+eyeL.position.set(-0.07,1.48,0.25); eyeR.position.set(0.07,1.48,0.25); scene.add(eyeL,eyeR);
 
-const mouth=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.02,0.02), new THREE.MeshStandardMaterial({color:0x333333}));
-mouth.position.set(0,1.38,0.25); scene.add(mouth);
+const mouth=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.018,0.015), new THREE.MeshStandardMaterial({color:0x442222}));
+mouth.position.set(0,1.36,0.26); scene.add(mouth);
+
+// Face details
+const browL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.01), new THREE.MeshStandardMaterial({color:0x333333}));
+const browR = browL.clone();
+browL.position.set(-0.07, 1.54, 0.26); browR.position.set(0.07, 1.54, 0.26);
+scene.add(browL, browR);
+
+const nose = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), new THREE.MeshStandardMaterial({color:0xe8c9a0}));
+nose.position.set(0, 1.44, 0.27);
+scene.add(nose);
 
 const armL=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.55,8), bodyMat);
 const armR=armL.clone();
@@ -281,7 +298,7 @@ let reactionType = 0; // 1 = good, -1 = bad
 function updateCharacter(level){
   const colors=[0x6d4c41,0x3d6b4f,0x43a047,0xffd54f];
   bodyMat.color.setHex(colors[Math.min(level,3)]);
-  kalpak.scale.setScalar(1 + level * 0.08);
+  kalpakGroup.scale.setScalar(1 + level * 0.08);
   head.scale.set(1, 1 + level*0.03, 1);
 }
 
@@ -294,7 +311,7 @@ function animate(){
   requestAnimationFrame(animate);
   body.rotation.y += 0.003;
   head.rotation.y += 0.003;
-  kalpak.rotation.y += 0.003;
+  kalpakGroup.rotation.y += 0.003;
 
   if(reactionAnim > 0){
     reactionAnim -= 0.015;
