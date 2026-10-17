@@ -101,12 +101,15 @@ function fireworks(){
 
 async function animateDeltas(deltas){
   const reaction=document.getElementById("reaction");
+  let anyUp=false, anyDown=false;
   for(const d of deltas){
     const el=document.getElementById("stat-"+d.k); if(!el) continue;
     const up = (d.k==="poverty"||d.k==="debt") ? d.v<0 : d.v>0;
+    if(up) anyUp=true; else anyDown=true;
     el.classList.add(up?"flash-up":"flash-down");
     reaction.textContent = up ? T[lang].up : T[lang].down;
     if(up) fireworks();
+    triggerReaction(up);
     await new Promise(r=>setTimeout(r,700));
     el.classList.remove("flash-up","flash-down");
   }
@@ -142,33 +145,88 @@ async function saveScore(){
     let h="<ol>"; data.forEach(e=>h+=`<li>${e.player_name} — ${e.score}</li>`); document.getElementById("leaderboard").innerHTML=h+"</ol>"; }catch(e){}
 }
 
-// 3D character that reacts
+// 3D character with clearer reactions
 const wrap=document.getElementById("canvas-wrap");
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
 renderer.setSize(wrap.clientWidth, wrap.clientHeight);
 wrap.appendChild(renderer.domElement);
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(50, wrap.clientWidth/wrap.clientHeight, 0.1, 100);
-camera.position.set(0,1.3,3.8);
-const light=new THREE.DirectionalLight(0xffffff,1.2); light.position.set(2,3,2); scene.add(light); scene.add(new THREE.AmbientLight(0x404040,0.9));
+camera.position.set(0,1.4,4);
+const light=new THREE.DirectionalLight(0xffffff,1.3); light.position.set(2,4,3); scene.add(light); scene.add(new THREE.AmbientLight(0x505050,1));
+
 const bodyMat=new THREE.MeshStandardMaterial({color:0x3d6b4f});
-const body=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.42,1.3,16), bodyMat);
-body.position.y=0.65; scene.add(body);
+const body=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.38,1.2,16), bodyMat);
+body.position.y=0.6; scene.add(body);
+
 const headMat=new THREE.MeshStandardMaterial({color:0xf5deb3});
-const head=new THREE.Mesh(new THREE.SphereGeometry(0.3,20,20), headMat);
-head.position.y=1.55; scene.add(head);
-const kalpak=new THREE.Mesh(new THREE.ConeGeometry(0.34,0.45,8), new THREE.MeshStandardMaterial({color:0xffffff}));
-kalpak.position.y=1.95; scene.add(kalpak);
-const eyeL=new THREE.Mesh(new THREE.SphereGeometry(0.04,8,8), new THREE.MeshStandardMaterial({color:0x222222}));
-const eyeR=eyeL.clone(); eyeL.position.set(-0.08,1.58,0.26); eyeR.position.set(0.08,1.58,0.26); scene.add(eyeL,eyeR);
+const head=new THREE.Mesh(new THREE.SphereGeometry(0.28,24,24), headMat);
+head.position.y=1.45; scene.add(head);
+
+const kalpak=new THREE.Mesh(new THREE.ConeGeometry(0.32,0.42,8), new THREE.MeshStandardMaterial({color:0xffffff}));
+kalpak.position.y=1.82; scene.add(kalpak);
+
+const eyeL=new THREE.Mesh(new THREE.SphereGeometry(0.035,8,8), new THREE.MeshStandardMaterial({color:0x111111}));
+const eyeR=eyeL.clone();
+eyeL.position.set(-0.07,1.48,0.24); eyeR.position.set(0.07,1.48,0.24); scene.add(eyeL,eyeR);
+
+const mouth=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.02,0.02), new THREE.MeshStandardMaterial({color:0x333333}));
+mouth.position.set(0,1.38,0.25); scene.add(mouth);
+
+const armL=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.55,8), bodyMat);
+const armR=armL.clone();
+armL.position.set(-0.38,0.85,0); armR.position.set(0.38,0.85,0);
+armL.rotation.z=0.3; armR.rotation.z=-0.3;
+scene.add(armL,armR);
+
+let reactionAnim = 0;
+let reactionType = 0; // 1 = good, -1 = bad
 
 function updateCharacter(level){
-  const colors=[0x8b4513,0x3d6b4f,0x4caf50,0xffd54f];
-  bodyMat.color.setHex(colors[level]||0x3d6b4f);
-  kalpak.scale.set(1+level*0.1,1+level*0.15,1+level*0.1);
-  head.scale.set(1,1+level*0.05,1);
+  const colors=[0x6d4c41,0x3d6b4f,0x43a047,0xffd54f];
+  bodyMat.color.setHex(colors[Math.min(level,3)]);
+  kalpak.scale.setScalar(1 + level * 0.08);
+  head.scale.set(1, 1 + level*0.03, 1);
 }
-function animate(){ requestAnimationFrame(animate); body.rotation.y+=0.004; head.rotation.y+=0.004; kalpak.rotation.y+=0.004; renderer.render(scene,camera); }
+
+function triggerReaction(isGood){
+  reactionAnim = 1;
+  reactionType = isGood ? 1 : -1;
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  body.rotation.y += 0.003;
+  head.rotation.y += 0.003;
+  kalpak.rotation.y += 0.003;
+
+  if(reactionAnim > 0){
+    reactionAnim -= 0.015;
+    const t = Math.sin(reactionAnim * Math.PI);
+    if(reactionType > 0){
+      // Happy: lean back, arms up, smile
+      body.rotation.x = -t * 0.25;
+      head.rotation.x = -t * 0.15;
+      armL.rotation.z = 0.3 - t * 1.2;
+      armR.rotation.z = -0.3 + t * 1.2;
+      mouth.scale.y = 1 + t * 3;
+    } else {
+      // Sad: lean forward, arms down, frown
+      body.rotation.x = t * 0.3;
+      head.rotation.x = t * 0.25;
+      armL.rotation.z = 0.3 + t * 0.5;
+      armR.rotation.z = -0.3 - t * 0.5;
+      mouth.scale.y = 1 - t * 0.6;
+    }
+  } else {
+    body.rotation.x *= 0.92;
+    head.rotation.x *= 0.92;
+    armL.rotation.z = 0.3 + (armL.rotation.z - 0.3) * 0.9;
+    armR.rotation.z = -0.3 + (armR.rotation.z + 0.3) * 0.9;
+    mouth.scale.y = 1 + (mouth.scale.y - 1) * 0.85;
+  }
+  renderer.render(scene,camera);
+}
 animate();
 window.addEventListener("resize",()=>{ renderer.setSize(wrap.clientWidth,wrap.clientHeight); camera.aspect=wrap.clientWidth/wrap.clientHeight; camera.updateProjectionMatrix(); });
 
